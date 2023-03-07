@@ -1,9 +1,8 @@
-const { expect, assert } = require("chai");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("CustomERC20", function () {
   let owner, user1, user2;
-  const init_supply_unit = ethers.constants.WeiPerEther;
   let TokenInstance;
   const initialSupply = 10000;
   const tradeBurnRatio = 1000;
@@ -17,8 +16,8 @@ describe("CustomERC20", function () {
   // before只执行一次
   before(async () => {
     [owner, user1, user2, _] = await ethers.getSigners();
-
   })
+
   // 在每个测试前，都要部署合约，并准备一些测试数据
   beforeEach(async () => {
     await deployCustomERC20();
@@ -148,3 +147,8 @@ describe("CustomERC20", function () {
     });
   });
 });
+
+
+// view类型一般是：expect(await ...)  =>  首先执行await拿到数据之后再进行断言比较
+// 操作类型的语句一般是： await expect(....)  =>  等到某一项操作完成，通常使用于：test for reverts
+// async await 是promise的语法糖，让执行流程从异步变同步，等待当前语句完成后再执行后续语句
