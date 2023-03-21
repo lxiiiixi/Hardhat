@@ -1,7 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-
 describe("TeamToken", function () {
     let owner, user1, user2, users;
     let TokenInstance;
@@ -15,7 +14,6 @@ describe("TeamToken", function () {
         for (const i in ARGS) {
             theArgs.push(ARGS[i])
         }
-        // console.log(theArgs);
         TokenInstance = await TeamToken.deploy(...theArgs)
     }
 
@@ -33,8 +31,6 @@ describe("TeamToken", function () {
             expect(await TokenInstance.decimals()).to.be.equal(18);
             expect(await TokenInstance.totalSupply()).to.be.equal(init_supply);
             expect(await TokenInstance.balanceOf(owner.address)).to.be.equal(init_supply)
-            // expect(await TokenInstance.owner()).to.be.equal(owner);
-            // expect(await TokenInstance.feeWallet()).to.be.equal(user1);
         });
 
         it(("Set up decimals can be seccessful"), async () => {
@@ -70,6 +66,7 @@ describe("TeamToken", function () {
         it("Tansfer to and from zero address should be failed", async () => {
             await deployTokens(args);
             await expect(TokenInstance.transfer(ZERO_ADDRESS, 100)).to.be.revertedWith("ERC20: transfer to the zero address")
+            // VoidSigner cannot sign transactions 零地址不能签名
             // await expect(TokenInstance.connect(ZERO_ADDRESS).transfer(user1.address, 100)).to.be.revertedWith("ERC20: transfer to the zero address")
         })
 
@@ -100,7 +97,15 @@ describe("TeamToken", function () {
         it("Tansfer to and from zero address should be failed", async () => {
             await deployTokens(args);
             await expect(TokenInstance.transferFrom(owner.address, ZERO_ADDRESS, 100)).to.be.revertedWith("ERC20: transfer to the zero address")
-            await expect(TokenInstance.transferFrom(ZERO_ADDRESS, ZERO_ADDRESS, 100)).to.be.revertedWith("ERC20: transfer from the zero address")
+            await expect(TokenInstance.transferFrom(ZERO_ADDRESS, user1.address, 100)).to.be.revertedWith("ERC20: transfer from the zero address")
+        })
+
+        it("TansferFrom must have allowance", async () => {
+            await deployTokens(args);
+            await TokenInstance.approve(owner.address, 200);
+            await TokenInstance.transferFrom(owner.address, user1.address, 100);
+            expect(await TokenInstance.allowance(owner.address, owner.address)).to.be.equal(100);
+            await TokenInstance.connect(user1).transfer(user2.address, 100);
         })
 
         it("Sender must have a balance of at least amount", async () => {
@@ -120,13 +125,11 @@ describe("TeamToken", function () {
 
         it("Approval of sender will change after transfer", async () => {
             await deployTokens(args);
-            // user1 给 owner 授权可以转user1的钱
             await TokenInstance.connect(user1).approve(owner.address, 1000);
             expect(await TokenInstance.allowance(user1.address, owner.address)).to.be.equal(1000);
-            await expect(TokenInstance.transferFrom(user1.address, user2.address, 100)).to.be.revertedWith("ERC20: transfer amount exceeds balance")
             await TokenInstance.transfer(user1.address, 100)
+            expect(await TokenInstance.balanceOf(owner.address)).to.be.equal(init_supply.sub(100))
             expect(await TokenInstance.balanceOf(user1.address)).to.be.equal(100)
-            // owner 去执行将user1的代币转给user2
             await expect(TokenInstance.transferFrom(user1.address, user2.address, 100)).to.be.emit(
                 TokenInstance, "Transfer"
             ).withArgs(user1.address, user2.address, 100);
@@ -161,12 +164,12 @@ describe("TeamToken", function () {
 
         it("Allowance should be added after increaseAllowance", async () => {
             await deployTokens(args);
-            // 合约调用
             await TokenInstance.approve(user1.address, 100);
+            expect(await TokenInstance.allowance(owner.address, user1.address)).to.be.equal(100);
             await expect(TokenInstance.increaseAllowance(user1.address, 100)).to.be.emit(
                 TokenInstance, "Approval"
             ).withArgs(owner.address, user1.address, 200);
-            expect(await TokenInstance.allowance(owner.address, user1.address)).to.be.equal(200);
+            expect(await TokenInstance.allowance(owner.address, user1.address)).to.be.equal(200)
         })
 
         it("Allowance should be decreased after decreaseAllowance", async () => {
