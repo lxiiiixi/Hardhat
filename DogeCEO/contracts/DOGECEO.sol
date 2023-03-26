@@ -7,6 +7,8 @@
     ██████╔╝╚█████╔╝╚██████╔╝███████╗  ╚█████╔╝███████╗╚█████╔╝
     ╚═════╝░░╚════╝░░╚═════╝░╚══════╝  ░╚════╝░╚══════╝░╚════╝░
     ✅website https://DOGE.CEO
+      contract https://bscscan.com/address/0xb3e1d840bb97d9fc0012a6372a7c05bcc3d71077#code
+      token https://bscscan.com/token/0xb3e1d840bb97d9fc0012a6372a7c05bcc3d71077
 
 */
 
@@ -146,8 +148,8 @@ library Address {
 contract DOGECEO is Context, IBEP20, Ownable {
     using Address for address payable; // 为 address payable 类型添加一些额外的函数
 
-    mapping(address => uint256) private _rOwned;
-    mapping(address => uint256) private _tOwned;
+    mapping(address => uint256) private _rOwned; // 映射结果
+    mapping(address => uint256) private _tOwned; // 实际拥有
     mapping(address => mapping(address => uint256)) private _allowances; // 存储每个地址的所有授权
     mapping(address => bool) private _isExcludedFromFee; // 存储每个地址的是否被排除在交易手续费中
     mapping(address => bool) private _isExcluded; // 存储每个地址的是否被排除在交易中
@@ -162,13 +164,14 @@ contract DOGECEO is Context, IBEP20, Ownable {
     uint8 private constant _decimals = 9;
     uint256 private constant MAX = ~uint256(0); // 2^256 - 1 最大的256位无符号整数
 
-    uint256 private _tTotal = 420 * 10 ** 15 * 10 ** _decimals; // 代币总供应量
+    uint256 private _tTotal = 420 * 10 ** 15 * 10 ** _decimals; // 代币总供应量 420 * 10 ** 15 个
     uint256 private _rTotal = (MAX - (MAX % _tTotal)); // 代币的实际供应量（去除一些奖励代币）
 
     uint256 public swapTokensAtAmount = 1e14 * 10 ** _decimals; // 表示最小交换量（防止恶意用户进行小额攻击）
+    // question1:swapTokensAtAmount meanning
 
-    address public deadWallet = 0x000000000000000000000000000000000000dEaD;
-    address public marketingWallet = 0xaa313121bd678d01880dad8Aa68E9B4fa8848DFD;
+    address public deadWallet = 0x000000000000000000000000000000000000dEaD; // dEaD 是为了通过大小写校验 checksum
+    address public marketingWallet = 0xaa313121bd678d01880dad8Aa68E9B4fa8848DFD; // 做市钱包
 
     string private constant _name = "Doge CEO";
     string private constant _symbol = "DOGECEO";
@@ -217,7 +220,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         excludeFromReward(pair);
         excludeFromReward(deadWallet);
 
-        _rOwned[owner()] = _rTotal;
+        _rOwned[owner()] = _rTotal; // 初始量全部给 owner
         _isExcludedFromFee[address(this)] = true;
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[marketingWallet] = true;
@@ -244,8 +247,8 @@ contract DOGECEO is Context, IBEP20, Ownable {
     }
 
     function balanceOf(address account) public view override returns (uint256) {
-        if (_isExcluded[account]) return _tOwned[account];
-        return tokenFromReflection(_rOwned[account]);
+        if (_isExcluded[account]) return _tOwned[account]; // 如果排除分红了就是直接返回
+        return tokenFromReflection(_rOwned[account]); // 根据映射计算
     }
 
     function allowance(
@@ -319,7 +322,6 @@ contract DOGECEO is Context, IBEP20, Ownable {
         return _isExcluded[account];
     }
 
-    //
     function reflectionFromToken(
         uint256 tAmount,
         bool deductTransferRfi
@@ -380,6 +382,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         return _isExcludedFromFee[account];
     }
 
+    // 分红
     function _reflectRfi(uint256 rRfi, uint256 tRfi) private {
         _rTotal -= rRfi;
         totFeesPaid.rfi += tRfi;
@@ -410,6 +413,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
     }
 
     // 根据tAmount和takeFee计算代币转移值
+    // 计算实际数量
     function _getTValues(
         uint256 tAmount,
         bool takeFee
@@ -426,6 +430,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         return s;
     }
 
+    // 计算映射数量
     function _getRValues(
         valuesFromGetValues memory s,
         uint256 tAmount,
@@ -514,7 +519,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         uint256 tAmount,
         bool takeFee
     ) private {
-        valuesFromGetValues memory s = _getValues(tAmount, takeFee);
+        valuesFromGetValues memory s = _getValues(tAmount, takeFee); // 根据比例计算参数
 
         if (_isExcluded[sender]) {
             //from excluded
@@ -563,6 +568,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         );
     }
 
+    // 对_excluded的批量地址操作
     function bulkExcludeFee(
         address[] memory accounts,
         bool state
