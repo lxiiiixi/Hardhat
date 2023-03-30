@@ -6,12 +6,18 @@ const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+// const hardhat = require("hardhat")
+// for (let i in hardhat) {
+//   console.log(i);
+// }
+
 // DOGECEO
 // uniswapV2中交易是先发送给路由合约，再由路由合约调用factory合约或者pair合约
 describe("DogeCeo", function () {
   const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
   const MARKET_ADDRESS = "0xaa313121bd678d01880dad8Aa68E9B4fa8848DFD";
   const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 
   async function deployUniswapAndDogoCeo() {
     const [owner, Alice, Bob] = await ethers.getSigners();
@@ -224,6 +230,7 @@ describe("DogeCeo", function () {
       await instance.connect(Alice).transfer(Bob.address, balance);
       expect(await instance.balanceOf(Bob.address)).to.gt(balance.mul(9).div(10));
       // gt():大于  lt():小于
+      // 每次交易的过程中都会有 10% 的手续费，其中 5% 用于奖励持币者，5% 用于奖励开发者
     })
 
     // ??????????

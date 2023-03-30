@@ -151,7 +151,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
     mapping(address => uint256) private _rOwned; // 映射结果
     mapping(address => uint256) private _tOwned; // 实际拥有
     mapping(address => mapping(address => uint256)) private _allowances; // 存储每个地址的所有授权
-    mapping(address => bool) private _isExcludedFromFee; // 存储每个地址的是否被排除在交易手续费中
+    mapping(address => bool) private _isExcludedFromFee; // 存储每个地址的是否被排除在交易手续费中 如果被排除则每次转账时不需要额外的10%手续费
     mapping(address => bool) private _isExcluded; // 存储每个地址的是否被排除在交易中
 
     address[] private _excluded;
@@ -165,10 +165,9 @@ contract DOGECEO is Context, IBEP20, Ownable {
     uint256 private constant MAX = ~uint256(0); // 2^256 - 1 最大的256位无符号整数
 
     uint256 private _tTotal = 420 * 10 ** 15 * 10 ** _decimals; // 代币总供应量 420 * 10 ** 15 个
-    uint256 private _rTotal = (MAX - (MAX % _tTotal)); // 代币的实际供应量（去除一些奖励代币）
+    uint256 private _rTotal = (MAX - (MAX % _tTotal)); // (2^256 - 1) - ((2^256 - 1) % (420 * 10^15 * 10^9))
 
     uint256 public swapTokensAtAmount = 1e14 * 10 ** _decimals; // 表示最小交换量（防止恶意用户进行小额攻击）
-    // question1:swapTokensAtAmount meanning
 
     address public deadWallet = 0x000000000000000000000000000000000000dEaD; // dEaD 是为了通过大小写校验 checksum
     address public marketingWallet = 0xaa313121bd678d01880dad8Aa68E9B4fa8848DFD; // 做市钱包
@@ -215,7 +214,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         );
 
         router = _router;
-        pair = _pair;
+        pair = _pair; // DOGE-WETH
 
         excludeFromReward(pair);
         excludeFromReward(deadWallet);
@@ -322,12 +321,14 @@ contract DOGECEO is Context, IBEP20, Ownable {
         return _isExcluded[account];
     }
 
+    // 根据数量查询映射的数量
     function reflectionFromToken(
         uint256 tAmount,
         bool deductTransferRfi
     ) public view returns (uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferRfi) {
+            // 如果不扣除转账手续费
             valuesFromGetValues memory s = _getValues(tAmount, true);
             return s.rAmount;
         } else {
@@ -358,6 +359,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
     }
 
     function includeInReward(address account) external onlyOwner {
+        // 只有被排除在需要收取交易费中的账户才能被包含在分红中
         require(_isExcluded[account], "Account is not excluded");
         for (uint256 i = 0; i < _excluded.length; i++) {
             if (_excluded[i] == account) {
@@ -370,6 +372,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         }
     }
 
+    // 解除对 account 的转账手续费
     function excludeFromFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = true;
     }
@@ -419,7 +422,7 @@ contract DOGECEO is Context, IBEP20, Ownable {
         bool takeFee
     ) private view returns (valuesFromGetValues memory s) {
         if (!takeFee) {
-            // takeFee 为 false（标记为不收税）
+            // takeFee 为 false（标记为不收税） =>  tTransferAmount 直接表示为 tAmount
             s.tTransferAmount = tAmount;
             return s;
         }
@@ -464,14 +467,18 @@ contract DOGECEO is Context, IBEP20, Ownable {
         return rSupply / tSupply;
     }
 
+    // 计算当前的代币供应量
     function _getCurrentSupply() private view returns (uint256, uint256) {
         uint256 rSupply = _rTotal;
         uint256 tSupply = _tTotal;
         for (uint256 i = 0; i < _excluded.length; i++) {
+            // 遍历 _excluded 数组中的每一个地址
             if (
+                // 如果该地址拥有的代币数量大于当前的 rSupply 或 tSupply，则直接返回最大的总供应量和流通量
                 _rOwned[_excluded[i]] > rSupply ||
                 _tOwned[_excluded[i]] > tSupply
             ) return (_rTotal, _tTotal);
+            // 分别减去该地址拥有的代币数量
             rSupply = rSupply - _rOwned[_excluded[i]];
             tSupply = tSupply - _tOwned[_excluded[i]];
         }
