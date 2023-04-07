@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.6.11;
 
+import "hardhat/console.sol";
+
 import "./IUniswapV2Factory.sol";
 import "./IUniswapV2Pair.sol";
 import "./FixedPoint.sol";
@@ -10,23 +12,28 @@ import "./UniswapV2Library.sol";
 
 // Fixed window oracle that recomputes the average price for the entire period once every period
 // Note that the price average is only guaranteed to be over at least 1 period, but may be over a longer period
+// 固定预测器，每个周期重新计算整个期间的平均价格，该合约允许用户从其池子余额中获取系统内代币的价格
+// 要从一对代币中获取一种代币的价格，调用该交易对具有代币地址和请求数量的实例consult(address token, uint amountIn)。
 contract UniswapPairOracle {
-    using FixedPoint for *;
+    using FixedPoint for *; // 用于处理定点数运算
 
     address owner_address;
     address timelock_address;
 
     uint public PERIOD = 3600; // 1 hour TWAP (time-weighted average price)
-    uint public CONSULT_LENIENCY = 120; // Used for being able to consult past the period end
-    bool public ALLOW_STALE_CONSULTS = false; // If false, consult() will fail if the TWAP is stale
 
-    IUniswapV2Pair public immutable pair;
+    IUniswapV2Pair public immutable pair; // Uniswap交易对地址
+    // 交易对中的两个token地址
     address public immutable token0;
     address public immutable token1;
 
+    // 交易对中的两个token的累计价格
     uint public price0CumulativeLast;
     uint public price1CumulativeLast;
-    uint32 public blockTimestampLast;
+
+    uint32 public blockTimestampLast; // 最后一次更新价格的区块时间戳
+
+    // 交易对中的两个token的平均价格
     FixedPoint.uq112x112 public price0Average;
     FixedPoint.uq112x112 public price1Average;
 
@@ -48,6 +55,7 @@ contract UniswapPairOracle {
         IUniswapV2Pair _pair = IUniswapV2Pair(
             UniswapV2Library.pairFor(factory, tokenA, tokenB)
         );
+
         pair = _pair;
         token0 = _pair.token0();
         token1 = _pair.token1();
@@ -65,49 +73,34 @@ contract UniswapPairOracle {
         timelock_address = _timelock_address;
     }
 
+    // 设置合约的owner地址
     function setOwner(address _owner_address) external onlyByOwnerOrGovernance {
         owner_address = _owner_address;
     }
 
+    // 设置治理timelock地址
     function setTimelock(
         address _timelock_address
     ) external onlyByOwnerOrGovernance {
         timelock_address = _timelock_address;
     }
 
+    // 设置计算 TWAP 的时间周期
     function setPeriod(uint _period) external onlyByOwnerOrGovernance {
         PERIOD = _period;
     }
 
-    function setConsultLeniency(
-        uint _consult_leniency
-    ) external onlyByOwnerOrGovernance {
-        CONSULT_LENIENCY = _consult_leniency;
-    }
-
-    function setAllowStaleConsults(
-        bool _allow_stale_consults
-    ) external onlyByOwnerOrGovernance {
-        ALLOW_STALE_CONSULTS = _allow_stale_consults;
-    }
-
-    // Check if update() can be called instead of wasting gas calling it
-    function canUpdate() public view returns (bool) {
-        uint32 blockTimestamp = UniswapV2OracleLibrary.currentBlockTimestamp();
-        uint32 timeElapsed = blockTimestamp - blockTimestampLast; // Overflow is desired
-        return (timeElapsed >= PERIOD);
-    }
-
+    // 更新交易对的价格数据并计算新的平均价格
     function update() external {
         (
             uint price0Cumulative,
             uint price1Cumulative,
             uint32 blockTimestamp
-        ) = UniswapV2OracleLibrary.currentCumulativePrices(address(pair)); // 获取交易对当前积累计价格
+        ) = UniswapV2OracleLibrary.currentCumulativePrices(address(pair));
         uint32 timeElapsed = blockTimestamp - blockTimestampLast; // Overflow is desired
 
         // Ensure that at least one full period has passed since the last update
-        // 两次更新之间时间间隔必须大于等于 1h
+        // 确保自上次更新以来至少过了一个完整的周期
         require(timeElapsed >= PERIOD, "UniswapPairOracle: PERIOD_NOT_ELAPSED");
 
         // Overflow is desired, casting never truncates
@@ -125,20 +118,11 @@ contract UniswapPairOracle {
     }
 
     // Note this will always return 0 before update has been called successfully for the first time.
-    // 在第一次成功调用 update 函数之前，该值始终为 0。
+    // 查询指定 token 在交易对中的价格
     function consult(
         address token,
         uint amountIn
     ) external view returns (uint amountOut) {
-        uint32 blockTimestamp = UniswapV2OracleLibrary.currentBlockTimestamp();
-        uint32 timeElapsed = blockTimestamp - blockTimestampLast; // Overflow is desired
-
-        // Ensure that the price is not stale
-        require(
-            (timeElapsed < (PERIOD + CONSULT_LENIENCY)) || ALLOW_STALE_CONSULTS,
-            "UniswapPairOracle: PRICE_IS_STALE_NEED_TO_CALL_UPDATE"
-        );
-
         if (token == token0) {
             amountOut = price0Average.mul(amountIn).decode144();
         } else {

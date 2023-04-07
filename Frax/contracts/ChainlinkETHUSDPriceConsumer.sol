@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "./AggregatorV3Interface.sol";
 
 // 使用 Chainlink 的 AggregatorV3Interface 接口获取 ETH/USD 价格
+// 负责以美元为单位获取ETH的价格，要从这个合同中得到以美元为单位的ETH的价格，调用getLatestPrice()并除以getDecimals()返回的值
 contract ChainlinkETHUSDPriceConsumer {
     AggregatorV3Interface internal priceFeed; // 示例化 AggregatorV3Interface 接口，并将其存储在 priceFeed 变量中
 

@@ -14,35 +14,47 @@ import "./FraxPoolLibrary.sol";
 
 /*
    Same as FraxPool.sol, but has some gas optimizations
+
+   - 用于铸造和赎回FRAX，以及回购多余抵押品的合约
+   - Frax池合约是由治理系统部署和批准的，这意味着在治理提案成功执行后，可以随时添加新的抵押品类型
+   - Frax池是一种智能合约，为用户存入抵押品来铸造Frax代币，或通过赎回发送到合约中的Frax来取回抵押品。每个Frax池都有不同类型的可接受抵押品。Frax 池可以支持任何类型的加密货币，但稳定币由于其价格的小波动，是最容易实现的。Frax的设计初衷是接受任何类型的加密货币作为抵押品，但低波动性池在一开始是首选，因为它们不会不规则地改变抵押品比率。
+     每个池合约都有一个池上限(可存储用于铸造FRAX的最大允许抵押品)和资产的价格信息流。
+     这些池通过对 FRAX 和 FRAXShare 合约的授权调用来创建和赎回协议代币。
+   - 滑点：每个铸造和赎回函数都有一个AMOUNT_out_min参数，该参数指定交易者预期的最小代币单元。这作为提交交易时滑点范围的限制，因为从交易创建时到区块打包期间价格可能会发生变化。
 */
 
 contract FraxPool is AccessControl {
     using SafeMath for uint256;
 
+    // using FraxPoolLibrary for FraxPoolLibrary.MintFF_Params;
+    // using FraxPoolLibrary for FraxPoolLibrary.BuybackFXS_Params;
+
     /* ========== STATE VARIABLES ========== */
 
-    ERC20 private collateral_token;
-    address private collateral_address;
-    address private owner_address;
+    ERC20 private collateral_token; // 池子中抵押贷币的实例
+    address private collateral_address; // 抵押贷币的地址
+    address private owner_address; // 池子的所有者地址
     // address private oracle_address;
-    address private frax_contract_address;
-    address private fxs_contract_address;
+    address private frax_contract_address; // FRAX 合约地址
+    address private fxs_contract_address; // FXS 合约地址
     address private timelock_address; // Timelock address for the governance contract
-    FRAXShares private FXS;
-    FRAXStablecoin private FRAX;
+    FRAXShares private FXS; // FXS 合约实例
+    FRAXStablecoin private FRAX; // FRAX 合约实例
     // UniswapPairOracle private oracle;
-    UniswapPairOracle private collatEthOracle;
-    address private collat_eth_oracle_address;
+    UniswapPairOracle private collatEthOracle; // 抵押品和ETH的价格信息流
+    address private collat_eth_oracle_address; // 抵押品和ETH的价格信息流的合约地址
     address private weth_address;
 
     uint256 private minting_fee;
-    uint256 private redemption_fee;
+    uint256 private redemption_fee; // 抵押费
 
-    mapping(address => uint256) public redeemFXSBalances;
-    mapping(address => uint256) public redeemCollateralBalances;
-    uint256 public unclaimedPoolCollateral;
-    uint256 public unclaimedPoolFXS;
-    mapping(address => uint256) public lastRedeemed;
+    mapping(address => uint256) public redeemFXSBalances; // 跟踪给定地址的赎回余额。赎回者不能在同一个区块中同时请求赎回和实际赎回他们的 FRAX。这是为了防止可能导致 FRAX 和/或 FXS 价格崩溃的闪电贷漏洞利用。他们必须等到下一个区块。此特定变量用于赎回抵押中的 FXS 部分。
+    mapping(address => uint256) public redeemCollateralBalances; // 同上，但是用于赎回抵押中抵押品的部分。
+
+    uint256 public unclaimedPoolCollateral; // 抵押品余额的总额
+    uint256 public unclaimedPoolFXS; // FXS余额的总额
+
+    mapping(address => uint256) public lastRedeemed; // 用于记录给定地址赎回的最后一个区块
 
     // Constants for various precisions
     uint256 private constant PRICE_PRECISION = 1e6;
@@ -53,8 +65,7 @@ contract FraxPool is AccessControl {
     uint256 private missing_decimals;
 
     // Pool_ceiling is the total units of collateral that a pool contract can hold
-    // Pool_ceiling是指池合约可以持有的抵押品总单位数。
-    uint256 public pool_ceiling = 0;
+    uint256 public pool_ceiling = 0; // 池子可以接受的最大抵押品数量
 
     // Stores price of the collateral, if price is paused
     // 如果抵押品价格暂停，则存储抵押品价格。
@@ -68,13 +79,13 @@ contract FraxPool is AccessControl {
     uint256 public redemption_delay = 1;
 
     // AccessControl Roles
-    bytes32 private constant MINT_PAUSER = keccak256("MINT_PAUSER");
-    bytes32 private constant REDEEM_PAUSER = keccak256("REDEEM_PAUSER");
-    bytes32 private constant BUYBACK_PAUSER = keccak256("BUYBACK_PAUSER");
+    bytes32 private constant MINT_PAUSER = keccak256("MINT_PAUSER"); // 铸币暂停者
+    bytes32 private constant REDEEM_PAUSER = keccak256("REDEEM_PAUSER"); // 赎回暂停者
+    bytes32 private constant BUYBACK_PAUSER = keccak256("BUYBACK_PAUSER"); // 回购暂停者
     bytes32 private constant RECOLLATERALIZE_PAUSER =
-        keccak256("RECOLLATERALIZE_PAUSER");
+        keccak256("RECOLLATERALIZE_PAUSER"); // 重新抵押暂停者
     bytes32 private constant COLLATERAL_PRICE_PAUSER =
-        keccak256("COLLATERAL_PRICE_PAUSER");
+        keccak256("COLLATERAL_PRICE_PAUSER"); // 抵押品价格暂停者
 
     // AccessControl state variables
     bool private mintPaused = false; // 记录是否暂停铸币功能
@@ -161,7 +172,7 @@ contract FraxPool is AccessControl {
     }
 
     // Returns the value of excess collateral held in this Frax pool, compared to what is needed to maintain the global collateral ratio
-    // 返回此 Frax 池中持有的超额抵押品价值，与维持全局抵押品比率所需的价值相比。
+    // 返回此 Frax 池中持有的超额抵押品价值（超过抵押率要求的余额）
     // 超额抵押品是指合约中持有的抵押品价值超过了发行的 FRAX 的总价值，因此这个函数的结果表示，如果合约需要赎回所有 FRAX 并销毁它们，那么还剩下多少抵押品可以被赎回。
     function availableExcessCollatDV() public view returns (uint256) {
         uint256 total_supply = FRAX.totalSupply(); // 当前 FRAX 的总供应量
@@ -186,7 +197,7 @@ contract FraxPool is AccessControl {
     /* ========== PUBLIC FUNCTIONS ========== */
 
     // Returns the price of the pool collateral in USD
-    // 返回 collateral_token 的价格（以美元计）
+    // 返回当前池子中 collateral_token 的价格（以美元计）
     function getCollateralPrice() public view returns (uint256) {
         if (collateralPricePaused == true) {
             // 处理特殊情况，例如抵押品价格暂停更新或者预言机出现故障的情况 => 返回预设的价格pausedPrice
@@ -213,7 +224,10 @@ contract FraxPool is AccessControl {
         weth_address = _weth_address;
     }
 
+    /******************************************** Mint ******************************************/
+
     // We separate out the 1t1, fractional and algorithmic minting functions for gas efficiency
+    // 1比1的铸币和赎回功能，从抵押品中铸造 FRAX（不需要FXS），只有在抵押率为100%时才可用。
     function mint1t1FRAX(
         uint256 collateral_amount,
         uint256 FRAX_out_min
@@ -249,6 +263,7 @@ contract FraxPool is AccessControl {
     }
 
     // 0% collateral-backed
+    // 纯算法铸造和赎回函数，从抵押品和 FXS 中铸造 FRAX，只能在0%的比例可用。
     function mintAlgorithmicFRAX(
         uint256 fxs_amount_d18,
         uint256 FRAX_out_min
@@ -263,6 +278,8 @@ contract FraxPool is AccessControl {
             fxs_amount_d18
         );
 
+        // libary 合约调用的两种调用有什么区别  （using）
+
         require(FRAX_out_min <= frax_amount_d18, "Slippage limit reached");
         FXS.pool_burn_from(msg.sender, fxs_amount_d18);
         FRAX.pool_mint(msg.sender, frax_amount_d18);
@@ -270,6 +287,7 @@ contract FraxPool is AccessControl {
 
     // Will fail if fully collateralized or fully algorithmic
     // > 0% and < 100% collateral-backed
+    // 部分抵押铸造和赎回函数，从 FXS 中铸造 FRAX，仅在担保比率为99.99%和0.01%之间可用。
     function mintFractionalFRAX(
         uint256 collateral_amount,
         uint256 fxs_amount,
@@ -324,6 +342,8 @@ contract FraxPool is AccessControl {
         );
         FRAX.pool_mint(msg.sender, mint_amount);
     }
+
+    /******************************************** Redeem ******************************************/
 
     // Redeem collateral. 100% collateral-backed
     function redeem1t1FRAX(
@@ -472,9 +492,13 @@ contract FraxPool is AccessControl {
         FXS.pool_mint(address(this), fxs_amount);
     }
 
+    /******************************************** Redeem ******************************************/
+
     // After a redemption happens, transfer the newly minted FXS and owed collateral from this pool
     // contract to the user. Redemption is split into two functions to prevent flash loans from being able
     // to take out FRAX/collateral from the system, use an AMM to trade the new price, and then mint back into the system.
+    // 赎回发生后，将新铸造的 FXS 和所欠抵押品从该矿池合约转移给用户。
+    // 赎回分为两个功能，以防止闪电贷能够从系统中取出 FRAX / 抵押品，使用 AMM 交易新价格，然后再铸币回系统
     function collectRedemption() external {
         require(
             (lastRedeemed[msg.sender].add(redemption_delay)) <= block.number,
@@ -556,9 +580,10 @@ contract FraxPool is AccessControl {
 
     // Function can be called by an FXS holder to have the protocol buy back FXS with excess collateral value from a desired collateral pool
     // This can also happen if the collateral ratio > 1
+    // 让 FXS 持有者从指定的抵押池中以过剩抵押价值的价格回购 FXS
     function buyBackFXS(
-        uint256 FXS_amount,
-        uint256 COLLATERAL_out_min
+        uint256 FXS_amount, // 回购的FAS数量
+        uint256 COLLATERAL_out_min // 最少应该获得的抵押品数量
     ) external {
         require(buyBackPaused == false, "Buyback is paused");
         uint256 fxs_price = FRAX.fxs_price();
@@ -577,12 +602,13 @@ contract FraxPool is AccessControl {
         uint256 collateral_precision = collateral_equivalent_d18.div(
             10 ** missing_decimals
         );
-
+        // 根据当前 FXS 价格和抵押品价格计算出回购 FXS 所需要的抵押品数量。如果回购价格低于 COLLATERAL_out_min 则会失败，因为这意味着回购价格低于用户的期望值，存在滑点风险。
         require(
             COLLATERAL_out_min <= collateral_precision,
             "Slippage limit reached"
         );
         // Give the sender their desired collateral and burn the FXS
+        // 从调用者地址中销毁 FXS 并将对应数量的抵押品转移给调用者
         FXS.pool_burn_from(msg.sender, FXS_amount);
         collateral_token.transfer(msg.sender, collateral_precision);
     }
