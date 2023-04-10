@@ -12,6 +12,8 @@ import "./AccessControl.sol";
 // import "../../Utils/StringHelpers.sol";
 import "./FraxPoolLibrary.sol";
 
+import "hardhat/console.sol";
+
 /*
    Same as FraxPool.sol, but has some gas optimizations
 
@@ -204,6 +206,15 @@ contract FraxPool is AccessControl {
             return pausedPrice;
         } else {
             uint256 eth_usd_price = FRAX.eth_usd_price();
+
+            console.log(
+                ">>>>>",
+                address(FRAX),
+                collatEthOracle.consult(
+                    weth_address,
+                    PRICE_PRECISION * (10 ** missing_decimals)
+                )
+            );
             return
                 eth_usd_price.mul(PRICE_PRECISION).div(
                     // WETH 在交易对中的价格

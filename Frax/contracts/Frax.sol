@@ -208,8 +208,6 @@ contract FRAXStablecoin is ERC20Custom, AccessControl {
                 "INVALID PRICE CHOICE. Needs to be either 0 (FRAX) or 1 (FXS)"
             );
 
-        console.log("price_vs_eth: %s", price_vs_eth);
-
         // Will be in 1e6 format
         // 将 ETH/USD 价格和 FRAX/ETH 或 FXS/ETH 价格相除，得到 FRAX/USD 或 FXS/USD 的价格
         return eth_usd_price.mul(PRICE_PRECISION).div(price_vs_eth);
