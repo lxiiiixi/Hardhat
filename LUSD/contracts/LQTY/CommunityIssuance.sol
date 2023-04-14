@@ -10,37 +10,49 @@ import "../Dependencies/Ownable.sol";
 import "../Dependencies/CheckContract.sol";
 import "../Dependencies/SafeMath.sol";
 
-//TODO: Decide upon and implement LQTY community issuance schedule.
-contract CommunityIssuance is ICommunityIssuance, Ownable, CheckContract, BaseMath {
+/**
+ * 该合约处理作为时间函数向稳定性提供者发行 LQTY 代币。它由 StabilityPool 控制。
+ * 系统启动后，CommunityIssuance 自动获得 3200 万个 LQTY——“社区发行”供应。
+ * 随着时间的推移，合约稳定地向稳定提供者发行这些 LQTY 代币。
+ */
+
+contract CommunityIssuance is
+    ICommunityIssuance,
+    Ownable,
+    CheckContract,
+    BaseMath
+{
     using SafeMath for uint;
 
     // --- Data ---
 
-    uint constant public SECONDS_IN_ONE_MINUTE = 60;
+    string public constant NAME = "CommunityIssuance";
 
-   /* The issuance factor F determines the curvature of the issuance curve.
-    *
-    * Minutes in one year: 60*24*365 = 525600
-    *
-    * For 50% of remaining tokens issued each year, with minutes as time units, we have:
-    * 
-    * F ** 525600 = 0.5
-    * 
-    * Re-arranging:
-    * 
-    * 525600 * ln(F) = ln(0.5)
-    * F = 0.5 ** (1/525600)
-    * F = 0.999998681227695000 
-    */
-    uint constant public ISSUANCE_FACTOR = 999998681227695000;
+    uint public constant SECONDS_IN_ONE_MINUTE = 60;
 
-    /* 
-    * The community LQTY supply cap is the starting balance of the Community Issuance contract.
-    * It should be minted to this contract by LQTYToken, when the token is deployed.
-    * 
-    * Set to 32M (slightly less than 1/3) of total LQTY supply.
-    */
-    uint constant public LQTYSupplyCap = 32e24; // 32 million
+    /* The issuance factor F determines the curvature of the issuance curve.
+     *
+     * Minutes in one year: 60*24*365 = 525600
+     *
+     * For 50% of remaining tokens issued each year, with minutes as time units, we have:
+     *
+     * F ** 525600 = 0.5
+     *
+     * Re-arranging:
+     *
+     * 525600 * ln(F) = ln(0.5)
+     * F = 0.5 ** (1/525600)
+     * F = 0.999998681227695000
+     */
+    uint public constant ISSUANCE_FACTOR = 999998681227695000;
+
+    /*
+     * The community LQTY supply cap is the starting balance of the Community Issuance contract.
+     * It should be minted to this contract by LQTYToken, when the token is deployed.
+     *
+     * Set to 32M (slightly less than 1/3) of total LQTY supply.
+     */
+    uint public constant LQTYSupplyCap = 32e24; // 32 million
 
     ILQTYToken public lqtyToken;
 
@@ -61,15 +73,10 @@ contract CommunityIssuance is ICommunityIssuance, Ownable, CheckContract, BaseMa
         deploymentTime = block.timestamp;
     }
 
-    function setAddresses
-    (
-        address _lqtyTokenAddress, 
+    function setAddresses(
+        address _lqtyTokenAddress,
         address _stabilityPoolAddress
-    ) 
-        external 
-        onlyOwner 
-        override 
-    {
+    ) external override onlyOwner {
         checkContract(_lqtyTokenAddress);
         checkContract(_stabilityPoolAddress);
 
@@ -89,12 +96,14 @@ contract CommunityIssuance is ICommunityIssuance, Ownable, CheckContract, BaseMa
     function issueLQTY() external override returns (uint) {
         _requireCallerIsStabilityPool();
 
-        uint latestTotalLQTYIssued = LQTYSupplyCap.mul(_getCumulativeIssuanceFraction()).div(DECIMAL_PRECISION);
+        uint latestTotalLQTYIssued = LQTYSupplyCap
+            .mul(_getCumulativeIssuanceFraction())
+            .div(DECIMAL_PRECISION);
         uint issuance = latestTotalLQTYIssued.sub(totalLQTYIssued);
 
         totalLQTYIssued = latestTotalLQTYIssued;
         emit TotalLQTYIssuedUpdated(latestTotalLQTYIssued);
-        
+
         return issuance;
     }
 
@@ -104,7 +113,9 @@ contract CommunityIssuance is ICommunityIssuance, Ownable, CheckContract, BaseMa
     t:  time passed since last LQTY issuance event  */
     function _getCumulativeIssuanceFraction() internal view returns (uint) {
         // Get the time passed since deployment
-        uint timePassedInMinutes = block.timestamp.sub(deploymentTime).div(SECONDS_IN_ONE_MINUTE);
+        uint timePassedInMinutes = block.timestamp.sub(deploymentTime).div(
+            SECONDS_IN_ONE_MINUTE
+        );
 
         // f^t
         uint power = LiquityMath._decPow(ISSUANCE_FACTOR, timePassedInMinutes);
@@ -125,6 +136,9 @@ contract CommunityIssuance is ICommunityIssuance, Ownable, CheckContract, BaseMa
     // --- 'require' functions ---
 
     function _requireCallerIsStabilityPool() internal view {
-        require(msg.sender == stabilityPoolAddress, "CommunityIssuance: caller is not SP");
+        require(
+            msg.sender == stabilityPoolAddress,
+            "CommunityIssuance: caller is not SP"
+        );
     }
 }

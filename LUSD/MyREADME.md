@@ -1,5 +1,7 @@
 > - Doc: https://docs.liquity.org/v/cn/
 > - Contract Code: https://github.com/liquity/beta
+> - Defillama: https://defillama.com/protocol/liquity
+> - DevUI: https://eth.liquity.fi/
 
 ## Introduction
 
@@ -10,6 +12,10 @@
     Liquity是一种去中心化的借贷协议，允许您用以太币作[抵押](https://docs.liquity.org/faq/borrowing#what-do-you-mean-by-collateral)提取[无息贷款](https://docs.liquity.org/faq/borrowing)。 贷款以LUSD（一种与美元挂钩的稳定币）的形式支付，并要求110%的[最低抵押率](https://docs.liquity.org/faq/borrowing#what-is-the-minimum-collateral-ratio-mcr-and-the-recommended-collateral-ratio)。
 
     除了用户的抵押外，Liquity的贷款还由一个LUSD的[稳定池](https://docs.liquity.org/faq/stability-pool-and-liquidations#what-is-the-stability-pool)和所有借款人集体作为最后担保人提供担保。
+
+    > Liquity 协议属于 CDP（Collateralized Debt Position）
+    >
+    > 在CDP中，用户可以将自己的数字资产作为抵押物，借出相应的稳定币（如DAI）。用户需要将抵押物锁定在智能合约中，同时设定一定的抵押率，例如150%。这意味着如果用户想要借出100个DAI，他需要抵押价值至少为150个DAI的数字资产。
 
   - Liquity的动机
 
@@ -116,6 +122,226 @@
     用户可以随时自由地将 LUSD 兑换为 ETH。但是，Liquity可能会对赎回的金额收取赎回费。
 
     例如，如果当前赎回费为 1%，ETH 的价格为 500 美元，您赎回 100 LUSD，则您将获得 0.198 ETH（0.2 ETH 减去 0.002 ETH 的赎回费）。
+
+> Liquify 借贷协议的特点：
+>
+> - 0⃣️利率
+>
+> - Low collateralization ratio 低担保率 —— 110%
+>
+>   也就是说存100可以借90（借出来的是LUSD——在它的系统中永远可以以1U的价格来赎回ETH）
+>
+> - 只提供后台的智能合约、SDK、协议等核心部分，而前端提供给第三方开发商，通过LQTY奖励的方式激励 (前端自定义交易抽成)。
+
+## Core System Architectrue
+
+1. 核心 Liquity 系统由多个智能合约组成，可部署到以太坊区块链。所有应用程序逻辑和数据都包含在这些合约中——不需要在 Web 服务器上运行单独的数据库或后端逻辑。实际上，以太坊网络本身就是 Liquity 后端。因此，所有余额和合约数据都是公开的。
+2. 该系统没有管理密钥或人工治理。一旦部署，它是完全自动化的、去中心化的，并且没有用户在系统中拥有任何特殊权限或控制权。
+3. 三个主要合约——BorrowerOperations.sol、TroveManager.sol 和 StabilityPool.sol——拥有面向用户的公共功能，并包含大部分内部系统逻辑。他们一起控制 Trove 状态更新以及 Ether 和 LUSD 代币在系统中的移动。
+
+### 核心合约介绍
+
+- `BorrowerOperations.sol` - 包含借款人与其 Trove 交互的基本操作：Trove 创建、ETH 充值/取款、稳定币发行和还款。它还将发行费用发送到 LQTYStaking 合约。 BorrowerOperations 函数调用 TroveManager，告诉它在必要时更新 Trove 状态。 BorrowerOperations 函数还调用各种池，告诉他们在必要时在池之间或池 <> 用户之间移动以太币/代币。
+
+> https://github.com/liquity/dev#launch-sequence-and-vesting-process
+>
+> 等待后续总结补充
+
+## Operation
+
+> https://eth.liquity.fi/
+>
+> 可以自行到网站上尝试操作
+
+**添加一个 Trove**
+
+<img src="https://cdn.jsdelivr.net/gh/lxiiiixi/Image-Hosting/Markdown/image-20230411162001236.png" alt="image-20230411162001236" style="zoom: 50%;" />
+
+**Stability Pool**
+
+通过质押 LUSD 可以获得 ETH 和 LQTY 作为奖励，会给出下一年存入稳定池的 LUSD 的 LQTY 回报率预估。
+
+<img src="https://cdn.jsdelivr.net/gh/lxiiiixi/Image-Hosting/Markdown/image-20230411162205426.png" alt="image-20230411162205426" style="zoom:50%;" />
+
+**Staking**
+
+LQTY 并不是一个治理代币，根据 Liquity 的经济模型，除了卖掉以外可以将 LQTY 去质押，质押了 LQTY 的用户，可以按比例获得每次新开的 Trove 所支付给平台的 Borrowing Fee，另外当用户使用 Redemption 功能时（用户想要用 LUSD 换回 ETH）也会需要支付一定的 Borrowing Fee，这个费用同样是会支付给平台再又平平台分发给 LQTY 的持有者
+
+> 清算规则：
+>
+> 当出现抵押物价值下降这样的情况使得 Collateral ratio 低于 110% 时，用户手上持有的 LUSD 可以自由支配，也可以在平台换回 ETH，但是在平台抵押的 ETH 会被清算，清算过程会经历几个步骤：
+>
+> 1. EHT 的价值下降导致 CR 低于 110%
+> 2. 接下来所有人都有资格成为清算人，这 10% 的超额抵押部分差价将被分给 Stability Pool 中的人（质押了 LUSD 的人）从而获得这 10% 的清算资金，从 Stability Pool 中的 LUSD burn 掉取弥补这个亏损的价值，如果此时 Stability Pool 中的 LUSD 不够了（Total Collateral Ratio 跌倒了 150%），会启动一个 Recovery Mode ，这时候所有人的 Trove 都会贡献进行清算
+
+## Contract
+
+- [ERC2612][https://eips.ethereum.org/EIPS/eip-2612]
+
+  ERC2612是一种基于以太坊的代币标准，也被称为EIP2612。它是在以太坊社区中广泛使用的ERC20代币标准的基础上，为代币和NFTs（非同质化代币）的安全转移和授权提供了更加安全和高效的方法。ERC2612标准规定了一个新的接口，称为"permit"，该接口允许代币所有者授权第三方在其代币余额上执行特定的操作，而无需在区块链上进行额外的交互。
+
+  ERC2612标准的核心思想是将代币授权的签名过程从交易执行期间转移到授权期间，从而减少交易的复杂性和成本，并提高代币交易的安全性。代币所有者可以通过签署一个包含授权信息的消息（如金额、接收者、截止时间等）来授权第三方代表其执行特定操作，而无需在区块链上执行交易。这些授权消息可以通过任何传输方式（如电子邮件、短信等）发送给第三方，从而实现更灵活和高效的代币授权。
+
+  ERC2612标准同时也规定了一个新的域分隔符（domain separator）的计算方法，用于确保授权签名的唯一性和不可重用性，以避免代币所有者的授权被恶意重放或篡改。
+
+  - permit() 函数
+
+    ERC2612的permit函数是一种新的代币授权方法，旨在提高代币转移的安全性、效率和灵活性。相比于传统的代币授权方法，如approve和transferFrom函数，permit函数具有以下优点：
+
+    1. 更高的安全性：permit函数采用了基于EIP712的签名方式，将签名和授权分离，从而避免了交易执行过程中被中间人攻击的风险。
+    2. 更高的效率：permit函数不需要发送交易，只需要通过对授权信息进行签名，就可以将代币授权给第三方，从而减少了交易的复杂性和成本。
+    3. 更高的灵活性：permit函数可以通过任何传输方式将授权信息发送给第三方，如电子邮件、短信等，从而实现更灵活和高效的代币授权。
+
+  - domainSeparator 变量
+
+    在ERC2612中，domainSeparator是一个哈希值，用于标识EIP-712域分隔符。域分隔符是一个结构体，用于指定消息的接收者、消息发送者、消息的链ID和合约地址等信息，用于确保消息的唯一性和完整性。
+
+    作用是确保消息的唯一性和完整性，避免了恶意攻击和重放攻击等安全问题。在使用ERC2612的permit函数进行代币授权时，需要使用domainSeparator来计算签名，确保签名的正确性和唯一性。在计算签名时，需要将domainSeparator、授权类型哈希和其他参数一起进行哈希，以确保签名的唯一性和完整性。
+
+- BigNumber
+
+  在 JavaScript 中，由于浮点数精度的限制，当数字超过 `Number.MAX_SAFE_INTEGER`（即 2^53 - 1）时，可能会丢失精度。因此，在处理大型数字时，我们通常使用 `BigNumber` 库来确保精度和正确性。
+
+  ```js
+  const { BigNumber } = require("ethers");
+  
+  // 创建两个 BigNumber 对象
+  const num1 = BigNumber.from("12345678901234567890");
+  const num2 = BigNumber.from("98765432109876543210");
+  
+  // 加法
+  const sum = num1.add(num2);
+  console.log(sum.toString()); // "111111111111111111100"
+  
+  // 减法
+  const difference = num2.sub(num1);
+  console.log(difference.toString()); // "86419753208641975320"
+  
+  // 乘法
+  const product = num1.mul(num2);
+  console.log(product.toString()); // "121932631137021795660634145237702268900"
+  
+  // 除法
+  const quotient = num2.div(num1);
+  console.log(quotient.toString()); // "8000000000"
+  ```
+
+  
+
+
+
+## Github Doc
+
+> https://github.com/liquity/dev README.md
+
+- Overview
+
+  Liquity是一个抵押债务平台。用户可以锁定以太坊，发行稳定币代币（LUSD）到自己的以太坊地址，然后将这些代币转移到任何其他以太坊地址。个人抵押债务头寸称为Trove。
+
+  稳定币代币的经济性质旨在维持1 LUSD = 1美元的价值，原因如下：
+
+  1. 系统旨在始终过度抵押——锁定的以太坊价值超过发行的稳定币的美元价值。
+  2. 稳定币是完全可兑换的——用户可以通过系统直接交换 \$x 的LUSD以获得\$x美元的ETH（减去费用）。
+  3. 系统通过可变的发行费用算法控制 LUSD 的生成。
+
+  在用一些以太坊开设Trove之后，用户可以发行（“借入”）代币，以使其Trove的抵押比率保持在110%以上。拥有$1000的以太坊抵押头寸的用户可以发行高达909.09 LUSD。
+
+  代币可以自由交换——任何拥有以太坊地址的人都可以发送或接收LUSD代币，无论他们是否拥有开放的Trove。在偿还Trove的债务后，代币将被销毁。
+
+  Liquity系统定期通过去中心化数据源更新ETH：USD价格。当Trove低于110％的最低抵押比率（MCR）时，它被认为是不足抵押，并容易被清算。
+
+- Liquidation and the Stability Pool
+
+  Liquity 按以下优先顺序使用两步清算机制：
+
+  1. 抵消包含 LUSD 代币的稳定池中抵押不足的 Troves
+  2. 如果稳定池清空，将抵押不足的 Troves 重新分配给其他借款人
+
+  Liquity 主要使用其稳定池中的 LUSD 代币来吸收抵押不足的债务，即偿还清算借款人的债务。
+
+  任何用户都可以将 LUSD 代币存入稳定池。这使他们能够从清算的 Trove 中获得抵押品。当发生清算时，清算的债务将被池中相同数量的 LUSD 取消（结果被销毁），并且清算的 Ether 按比例分配给存款人。
+
+  稳定池存款人可以期望从清算中获得净收益，因为在大多数情况下，清算的 Ether 的价值将大于取消的债务的价值（因为清算的 Trove 的 ICR 可能略低于 110%）。
+
+  任何人都可以调用 public liquidateTroves() 函数，该函数将检查抵押不足的 Troves，并将其清算。或者，他们可以使用自定义的 Trove 地址列表调用 batchLiquidateTroves() 以尝试清算。
+
+  - Liquidation gas costs
+
+    目前，通过上述功能进行的大规模清算每 trove 花费 60-65k gas。因此，系统可以在单笔交易中清算最多 95-105 个宝库。
+
+  - Liquidation Logic
+
+    清算的精确行为取决于被清算的 Trove 的 ICR 和全球系统条件：系统的总抵押率（TCR）、稳定池的大小等。
+
+    下面是单个 Trove 在正常模式和恢复模式下的清算逻辑。SP.LUSD 代表稳定池中的 LUSD。
+
+    > - ICR（Initial Collateral Ratio - 初始保证金比率）
+    >
+    >   加密货币借贷中的ICR指的是抵押品的价值占借款金额的比率，即最初提供的抵押品价值相对于所借款项的比率。
+    >
+    > - MCR（Minimum Collateralization Ratio - 抵押品最低抵押比率）
+    >
+    >   它是指保障抵押品价值的最低要求，以确保抵押品的价值不会低于贷款金额，从而保护借款人和投资者的利益。
+    >
+    >   例如，在一个抵押债务平台上，MCR设定为110%，这意味着借款人需要提供抵押品，其价值至少为贷款金额的110%。如果抵押品的价值下降到低于MCR，则该债务头寸就会被自动清算，以保护借款人和投资者的利益。
+
+    #### Liquidations in Normal Mode: TCR >= 150%
+
+    | Condition                         | Liquidation behavior                                         |
+    | --------------------------------- | ------------------------------------------------------------ |
+    | ICR < MCR & SP.LUSD >= trove.debt | StabilityPool 中等于 Trove 债务的 LUSD 被 Trove 债务抵消。 Trove 的 ETH 抵押品由储户共享。 |
+    | ICR < MCR & SP.LUSD < trove.debt  | StabilityPool 的 LUSD 总额被来自 Trove 的等量债务所抵消。储户共享 Trove 抵押品的一小部分（等于其抵消债务与其全部债务的比率）。剩余的债务和抵押品（减去 ETH gas 补偿）被重新分配给活跃的 Troves |
+    | ICR < MCR & SP.LUSD = 0           | 将所有债务和抵押品（减去 ETH 气体补偿）重新分配给活跃的 Troves。 |
+    | ICR >= MCR                        | Do nothing.                                                  |
+
+    #### Liquidations in Recovery Mode: TCR < 150%
+
+    | Condition                                | Liquidation behavior                                         |
+    | ---------------------------------------- | ------------------------------------------------------------ |
+    | ICR <=100%                               | 将所有债务和抵押品（减去 ETH 气体补偿）重新分配给活跃的 Troves。 |
+    | 100% < ICR < MCR & SP.LUSD > trove.debt  | StabilityPool 中等于 Trove 债务的 LUSD 被 Trove 债务抵消。储户之间共享 Trove 的 ETH 抵押品（减去 ETH 气体补偿）。 |
+    | 100% < ICR < MCR & SP.LUSD < trove.debt  | StabilityPool 的 LUSD 总额被来自 Trove 的等量债务所抵消。储户共享 Trove 抵押品的一小部分（等于其抵消债务与其全部债务的比率）。剩余的债务和抵押品（减去 ETH 气体补偿）被重新分配给活跃的宝库 |
+    | MCR <= ICR < TCR & SP.LUSD >= trove.debt | LUSD 池被来自 Trove 的等量债务抵消。美元价值等于 1.1 * 债务的一小部分 ETH 抵押品由储户共享。没有任何东西被重新分配给其他活跃的 Troves。由于它的 ICR > 1.1，因此 Trove 有剩余的抵押品，它被发送到 CollSurplusPool 并由借款人索取。宝库已关闭。 |
+    | MCR <= ICR < TCR & SP.LUSD < trove.debt  | Do nothing.                                                  |
+    | ICR >= TCR                               | Do nothing.                                                  |
+
+- Gains From Liquidations
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -80,143 +80,143 @@ describe("FRAX TEST", function () {
     };
   }
 
-  // describe("Deploy and check some datas", async function () {
-  //   it("Check the meta data of frax", async function () {
-  //     const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
-  //     const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
-  //     const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
-  //     const { Owner, Creator, TimeLockAdmin } = users;
-  //     const { frax_genesis_supply } = data;
+  describe("Deploy and check some datas", async function () {
+    it("Check the meta data of frax", async function () {
+      const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
+      const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
+      const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
+      const { Owner, Creator, TimeLockAdmin } = users;
+      const { frax_genesis_supply } = data;
 
-  // expect(await FraxInstance.DEFAULT_ADMIN_ADDRESS()).to.equal(Owner.address);
-  // expect(await FraxInstance.owner_address()).to.equal(Owner.address);
-  // expect(await FraxInstance.timelock_address()).to.equal(TimelockInstance.address);
-  // expect(await FraxInstance.totalSupply()).to.equal(frax_genesis_supply);
-  // expect(await FraxInstance.controller_address()).to.equal(ZERO_ADDRESS);
-  // expect(await FraxInstance.balanceOf(Creator.address)).to.equal(frax_genesis_supply);
+      expect(await FraxInstance.DEFAULT_ADMIN_ADDRESS()).to.equal(Owner.address);
+      expect(await FraxInstance.owner_address()).to.equal(Owner.address);
+      expect(await FraxInstance.timelock_address()).to.equal(TimelockInstance.address);
+      expect(await FraxInstance.totalSupply()).to.equal(frax_genesis_supply);
+      expect(await FraxInstance.controller_address()).to.equal(ZERO_ADDRESS);
+      expect(await FraxInstance.balanceOf(Creator.address)).to.equal(frax_genesis_supply);
 
-  //     expect(await FraxInstance.frax_eth_oracle_address()).to.equal(FraxWethOralceInstance.address);
-  //     expect(await FraxInstance.fxs_eth_oracle_address()).to.equal(FxsWethOralceInstance.address);
-  //     expect(await FraxInstance.eth_usd_consumer_address()).to.equal(ChainlinkETHUSDPrice.address);
-  //     expect(await FraxInstance.weth_address()).to.equal(WethInstance.address);
-  //     expect(await FraxInstance.fxs_address()).to.equal(FxsInstance.address);
-  //   });
-  // });
+      expect(await FraxInstance.frax_eth_oracle_address()).to.equal(FraxWethOralceInstance.address);
+      expect(await FraxInstance.fxs_eth_oracle_address()).to.equal(FxsWethOralceInstance.address);
+      expect(await FraxInstance.eth_usd_consumer_address()).to.equal(ChainlinkETHUSDPrice.address);
+      expect(await FraxInstance.weth_address()).to.equal(WethInstance.address);
+      expect(await FraxInstance.fxs_address()).to.equal(FxsInstance.address);
+    });
+  });
 
-  // describe("Oracle data test", async function () {
-  //   it("Oracle data test", async function () {
-  //     const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
-  //     const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
-  //     const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
+  describe("Oracle data test", async function () {
+    it("Oracle data test", async function () {
+      const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
+      const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
+      const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
 
-  //     const eth_usd_price = await FraxInstance.eth_usd_price();
-  //     const frax_price = await FraxInstance.frax_price();
-  //     const fxs_price = await FraxInstance.fxs_price();
+      const eth_usd_price = await FraxInstance.eth_usd_price();
+      const frax_price = await FraxInstance.frax_price();
+      const fxs_price = await FraxInstance.fxs_price();
 
-  //     console.log(eth_usd_price);
-  //     console.log(frax_price);
-  //     console.log(fxs_price);
-  //   });
-  // });
+      console.log(eth_usd_price);
+      console.log(frax_price);
+      console.log(fxs_price);
+    });
+  });
 
-  // describe("Test refreshCollateralRatio function", async function () {
-  //   it("Function can't be called during the interval", async function () {
-  //     const { instance } = await loadFixture(deployFRAXStablecoin);
-  //     const { FraxInstance } = instance;
-  //     const ONE_HOUR_IN_SECONDS = 3600;
-  //     expect(await FraxInstance.refresh_cooldown()).to.equal(3600);
+  describe("Test refreshCollateralRatio function", async function () {
+    it("Function can't be called during the interval", async function () {
+      const { instance } = await loadFixture(deployFRAXStablecoin);
+      const { FraxInstance } = instance;
+      const ONE_HOUR_IN_SECONDS = 3600;
+      expect(await FraxInstance.refresh_cooldown()).to.equal(3600);
 
-  //     await FraxInstance.refreshCollateralRatio();
-  //     await time.increase(1000);
-  //     await expect(FraxInstance.refreshCollateralRatio()).to.be.revertedWith("Must wait for the refresh cooldown since last refresh");
-  //     await time.increase(ONE_HOUR_IN_SECONDS);
-  //     await FraxInstance.refreshCollateralRatio();
-  //   });
+      await FraxInstance.refreshCollateralRatio();
+      await time.increase(1000);
+      await expect(FraxInstance.refreshCollateralRatio()).to.be.revertedWith("Must wait for the refresh cooldown since last refresh");
+      await time.increase(ONE_HOUR_IN_SECONDS);
+      await FraxInstance.refreshCollateralRatio();
+    });
 
 
-  //   it("Collateral ratio should get a correct solution", async function () {
-  //     const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
-  //     const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
-  //     const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
-  //     const { Owner, Creator, TimeLockAdmin } = users;
+    it("Collateral ratio should get a correct solution", async function () {
+      const { instance, oracle, users, data } = await loadFixture(deployFRAXStablecoin);
+      const { FraxInstance, TimelockInstance, FxsInstance, WethInstance } = instance;
+      const { FraxWethOralceInstance, ChainlinkETHUSDPrice, FxsWethOralceInstance } = oracle;
+      const { Owner, Creator, TimeLockAdmin } = users;
 
-  //     const ONE_HOUR_IN_SECONDS = 3600;
-  //     const price_target = await FraxInstance.price_target();
-  //     const price_band = await FraxInstance.price_band();
-  //     const frax_price_cur = await FraxInstance.frax_price();
-  //     const global_collateral_ratio = await FraxInstance.global_collateral_ratio();
-  //     const frax_step = await FraxInstance.frax_step();
+      const ONE_HOUR_IN_SECONDS = 3600;
+      const price_target = await FraxInstance.price_target();
+      const price_band = await FraxInstance.price_band();
+      const frax_price_cur = await FraxInstance.frax_price();
+      const global_collateral_ratio = await FraxInstance.global_collateral_ratio();
+      const frax_step = await FraxInstance.frax_step();
 
-  //     expect(await price_target).to.equal(1000000);
-  //     expect(await price_band).to.equal(5000);
-  //     expect(await global_collateral_ratio).to.equal(1000000);
-  //     expect(await frax_step).to.equal(2500);
+      expect(await price_target).to.equal(1000000);
+      expect(await price_band).to.equal(5000);
+      expect(await global_collateral_ratio).to.equal(1000000);
+      expect(await frax_step).to.equal(2500);
 
-  //     function getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step) {
-  //       // frax_price_cur > price_target + price_band   =>   增加 global_collateral_ratio 并使其不超过 1000000
-  //       if (frax_price_cur.lt(price_target.sub(price_band)))
-  //         if (global_collateral_ratio.add(frax_step).gt(1000000)) {
-  //           global_collateral_ratio = 1000000;
-  //         } else {
-  //           global_collateral_ratio = global_collateral_ratio.add(frax_step);
-  //         }
-  //       // frax_price_cur > price_target + price_band   =>   减少 global_collateral_ratio 并使其不低于 0
-  //       else if (frax_price_cur.gt(price_target.add(price_band)))
-  //         if (global_collateral_ratio.lt(frax_step)) {
-  //           global_collateral_ratio = 0;
-  //         } else {
-  //           global_collateral_ratio = global_collateral_ratio.sub(frax_step);
-  //         }
-  //       return ethers.BigNumber.from(global_collateral_ratio);
-  //     }
-  //     await FraxInstance.refreshCollateralRatio();
-  //     expect(await FraxInstance.global_collateral_ratio()).to.equal(getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step));
+      function getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step) {
+        // frax_price_cur > price_target + price_band   =>   增加 global_collateral_ratio 并使其不超过 1000000
+        if (frax_price_cur.lt(price_target.sub(price_band)))
+          if (global_collateral_ratio.add(frax_step).gt(1000000)) {
+            global_collateral_ratio = 1000000;
+          } else {
+            global_collateral_ratio = global_collateral_ratio.add(frax_step);
+          }
+        // frax_price_cur > price_target + price_band   =>   减少 global_collateral_ratio 并使其不低于 0
+        else if (frax_price_cur.gt(price_target.add(price_band)))
+          if (global_collateral_ratio.lt(frax_step)) {
+            global_collateral_ratio = 0;
+          } else {
+            global_collateral_ratio = global_collateral_ratio.sub(frax_step);
+          }
+        return ethers.BigNumber.from(global_collateral_ratio);
+      }
+      await FraxInstance.refreshCollateralRatio();
+      expect(await FraxInstance.global_collateral_ratio()).to.equal(getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step));
 
-  //     await time.increase(ONE_HOUR_IN_SECONDS + 100);
-  //     await FraxInstance.setPriceBand(10000)
-  //     expect(await FraxInstance.global_collateral_ratio()).to.equal(getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step));
-  //   });
-  // });
+      await time.increase(ONE_HOUR_IN_SECONDS + 100);
+      await FraxInstance.setPriceBand(10000)
+      expect(await FraxInstance.global_collateral_ratio()).to.equal(getCollateralRatio(price_target, price_band, frax_price_cur, global_collateral_ratio, frax_step));
+    });
+  });
 
-  // describe("FXS test", async function () {
-  //   it("Check the meta data of FRAXShares", async function () {
-  //     const { instance, users, data } = await loadFixture(deployFRAXStablecoin);
-  //     const { TimelockInstance, FxsInstance } = instance;
-  //     const { Owner } = users;
-  //     const { fxs_genesis_supply } = data;
+  describe("FXS test", async function () {
+    it("Check the meta data of FRAXShares", async function () {
+      const { instance, users, data } = await loadFixture(deployFRAXStablecoin);
+      const { TimelockInstance, FxsInstance } = instance;
+      const { Owner } = users;
+      const { fxs_genesis_supply } = data;
 
-  //     expect(await FxsInstance.name()).to.equal("FRAXShares");
-  //     expect(await FxsInstance.owner_address()).to.equal(Owner.address);
-  //     expect(await FxsInstance.timelock_address()).to.equal(TimelockInstance.address);
-  //     expect(await FxsInstance.totalSupply()).to.equal(fxs_genesis_supply);
-  //     expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply);
-  //   });
+      expect(await FxsInstance.name()).to.equal("FRAXShares");
+      expect(await FxsInstance.owner_address()).to.equal(Owner.address);
+      expect(await FxsInstance.timelock_address()).to.equal(TimelockInstance.address);
+      expect(await FxsInstance.totalSupply()).to.equal(fxs_genesis_supply);
+      expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply);
+    });
 
-  //   it("Test transfer and transferFrom", async function () {
-  //     const { instance, users, data } = await loadFixture(deployFRAXStablecoin);
-  //     const { FxsInstance } = instance;
-  //     const { Owner, Creator, Alice } = users;
-  //     const { fxs_genesis_supply } = data;
+    it("Test transfer and transferFrom", async function () {
+      const { instance, users, data } = await loadFixture(deployFRAXStablecoin);
+      const { FxsInstance } = instance;
+      const { Owner, Creator, Alice } = users;
+      const { fxs_genesis_supply } = data;
 
-  //     expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply);
-  //     await FxsInstance.transfer(Creator.address, 1000000);
-  //     expect(await FxsInstance.balanceOf(Creator.address)).to.equal(1000000);
-  //     expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply.sub(1000000));
-  //     await expect(FxsInstance.transferFrom(Creator.address, Alice.address, 1000000)).to.revertedWith("ERC20: transfer amount exceeds allowance")
-  //     await FxsInstance.connect(Creator).approve(Owner.address, 1000000);
-  //     await FxsInstance.transferFrom(Creator.address, Alice.address, 1000000);
-  //     expect(await FxsInstance.balanceOf(Creator.address)).to.equal(0);
-  //     expect(await FxsInstance.balanceOf(Alice.address)).to.equal(1000000);
+      expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply);
+      await FxsInstance.transfer(Creator.address, 1000000);
+      expect(await FxsInstance.balanceOf(Creator.address)).to.equal(1000000);
+      expect(await FxsInstance.balanceOf(Owner.address)).to.equal(fxs_genesis_supply.sub(1000000));
+      await expect(FxsInstance.transferFrom(Creator.address, Alice.address, 1000000)).to.revertedWith("ERC20: transfer amount exceeds allowance")
+      await FxsInstance.connect(Creator).approve(Owner.address, 1000000);
+      await FxsInstance.transferFrom(Creator.address, Alice.address, 1000000);
+      expect(await FxsInstance.balanceOf(Creator.address)).to.equal(0);
+      expect(await FxsInstance.balanceOf(Alice.address)).to.equal(1000000);
 
-  //     const votes = await FxsInstance.getCurrentVotes(Creator.address);
-  //     // const Priorvotes = await FxsInstance.getPriorVotes(Creator.address);
-  //     console.log("votes: ", votes.toString());
+      const votes = await FxsInstance.getCurrentVotes(Creator.address);
+      // const Priorvotes = await FxsInstance.getPriorVotes(Creator.address);
+      console.log("votes: ", votes.toString());
 
-  //     const numCheckpoints = await FxsInstance.numCheckpoints(Creator.address);
-  //     const Checkpoint = await FxsInstance.checkpoints(Creator.address, numCheckpoints - 1);
-  //     console.log(Checkpoint, numCheckpoints);
-  //   });
-  // });
+      const numCheckpoints = await FxsInstance.numCheckpoints(Creator.address);
+      const Checkpoint = await FxsInstance.checkpoints(Creator.address, numCheckpoints - 1);
+      console.log(Checkpoint, numCheckpoints);
+    });
+  });
 
   describe("Pool test", async function () {
     it("Check the meta data of FRAXShares", async function () {

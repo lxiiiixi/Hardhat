@@ -7,40 +7,46 @@ import "./LiquityMath.sol";
 import "../Interfaces/IActivePool.sol";
 import "../Interfaces/IDefaultPool.sol";
 import "../Interfaces/IPriceFeed.sol";
+import "../Interfaces/ILiquityBase.sol";
 
-/* 
-* Base contract for TroveManager, BorrowerOperations and StabilityPool. Contains global system constants and
-* common functions. 
-*/
-contract LiquityBase is BaseMath {
+/* TroveManager 和 BorrowerOperations 都继承自父合约 LiquityBase，其中包含全局常量和一些常用函数。 */
+
+/*
+ * Base contract for TroveManager, BorrowerOperations and StabilityPool. Contains global system constants and
+ * common functions.
+ */
+contract LiquityBase is BaseMath, ILiquityBase {
     using SafeMath for uint;
 
-    uint constant public _100pct = 1000000000000000000; // 1e18 == 100%
+    uint public constant _100pct = 1000000000000000000; // 1e18 == 100%
 
     // Minimum collateral ratio for individual troves
-    uint constant public MCR = 1100000000000000000; // 110%
+    uint public constant MCR = 1100000000000000000; // 个人 Trove 的最小抵押率 —— 110%
 
     // Critical system collateral ratio. If the system's total collateral ratio (TCR) falls below the CCR, Recovery Mode is triggered.
-    uint constant public CCR = 1500000000000000000; // 150%
+    uint public constant CCR = 1500000000000000000; // 系统关键抵押率 —— 150%（如果系统的总抵押率低于 CCR，将会触发恢复模式）
 
     // Amount of LUSD to be locked in gas pool on opening troves
-    uint constant public LUSD_GAS_COMPENSATION = 50e18;
+    uint public constant LUSD_GAS_COMPENSATION = 200e18;
 
     // Minimum amount of net LUSD debt a trove must have
-    uint constant public MIN_NET_DEBT = 1950e18;  
-    // uint constant public MIN_NET_DEBT = 0; 
+    uint public constant MIN_NET_DEBT = 1800e18;
+    // uint constant public MIN_NET_DEBT = 0;
 
-    uint constant public PERCENT_DIVISOR = 200; // dividing by 200 yields 0.5%
+    uint public constant PERCENT_DIVISOR = 200; // dividing by 200 yields 0.5%
+
+    uint public constant BORROWING_FEE_FLOOR = (DECIMAL_PRECISION / 1000) * 5; // 0.5%
 
     IActivePool public activePool;
 
     IDefaultPool public defaultPool;
 
-    IPriceFeed public priceFeed;
+    IPriceFeed public override priceFeed;
 
     // --- Gas compensation functions ---
 
     // Returns the composite debt (drawn debt + gas compensation) of a trove, for the purpose of ICR calculation
+    // 返回Trove的组合债务（绘制的债务+燃气补偿），用于的ICR计算。
     function _getCompositeDebt(uint _debt) internal pure returns (uint) {
         return _debt.add(LUSD_GAS_COMPENSATION);
     }
@@ -50,7 +56,9 @@ contract LiquityBase is BaseMath {
     }
 
     // Return the amount of ETH to be drawn from a trove's collateral and sent as gas compensation.
-    function _getCollGasCompensation(uint _entireColl) internal pure returns (uint) {
+    function _getCollGasCompensation(
+        uint _entireColl
+    ) internal pure returns (uint) {
         return _entireColl / PERCENT_DIVISOR;
     }
 
@@ -72,7 +80,11 @@ contract LiquityBase is BaseMath {
         uint entireSystemColl = getEntireSystemColl();
         uint entireSystemDebt = getEntireSystemDebt();
 
-        TCR = LiquityMath._computeCR(entireSystemColl, entireSystemDebt, _price);
+        TCR = LiquityMath._computeCR(
+            entireSystemColl,
+            entireSystemDebt,
+            _price
+        );
 
         return TCR;
     }
@@ -83,13 +95,15 @@ contract LiquityBase is BaseMath {
         return TCR < CCR;
     }
 
-    function _requireUserAcceptsFee(uint _fee, uint _amount, uint _maxFeePercentage) internal pure {
+    function _requireUserAcceptsFee(
+        uint _fee,
+        uint _amount,
+        uint _maxFeePercentage
+    ) internal pure {
         uint feePercentage = _fee.mul(DECIMAL_PRECISION).div(_amount);
-        require(feePercentage <= _maxFeePercentage, "Fee exceeded provided maximum");
-    }
-
-    function _requireValidMaxFeePercentage(uint _maxFeePercentage) internal pure {
-        require(_maxFeePercentage >= 5e15 && _maxFeePercentage <= DECIMAL_PRECISION,
-         "Max fee percentage must be between 0.5% and 100%");
+        require(
+            feePercentage <= _maxFeePercentage,
+            "Fee exceeded provided maximum"
+        );
     }
 }

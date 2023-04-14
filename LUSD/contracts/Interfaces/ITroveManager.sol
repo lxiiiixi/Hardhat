@@ -2,8 +2,15 @@
 
 pragma solidity 0.6.11;
 
+import "./ILiquityBase.sol";
+import "./IStabilityPool.sol";
+import "./ILUSDToken.sol";
+import "./ILQTYToken.sol";
+import "./ILQTYStaking.sol";
+
+
 // Common interface for the Trove Manager.
-interface ITroveManager {
+interface ITroveManager is ILiquityBase {
     
     // --- Events ---
 
@@ -46,6 +53,11 @@ interface ITroveManager {
         address _lqtyTokenAddress,
         address _lqtyStakingAddress
     ) external;
+
+    function stabilityPool() external view returns (IStabilityPool);
+    function lusdToken() external view returns (ILUSDToken);
+    function lqtyToken() external view returns (ILQTYToken);
+    function lqtyStaking() external view returns (ILQTYStaking);
 
     function getTroveOwnersCount() external view returns (uint);
 
@@ -96,10 +108,15 @@ interface ITroveManager {
     function removeStake(address _borrower) external;
 
     function getRedemptionRate() external view returns (uint);
+    function getRedemptionRateWithDecay() external view returns (uint);
+
+    function getRedemptionFeeWithDecay(uint _ETHDrawn) external view returns (uint);
 
     function getBorrowingRate() external view returns (uint);
+    function getBorrowingRateWithDecay() external view returns (uint);
 
     function getBorrowingFee(uint LUSDDebt) external view returns (uint);
+    function getBorrowingFeeWithDecay(uint _LUSDDebt) external view returns (uint);
 
     function decayBaseRateFromBorrowing() external;
 

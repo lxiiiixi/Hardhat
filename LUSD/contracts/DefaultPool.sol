@@ -2,7 +2,7 @@
 
 pragma solidity 0.6.11;
 
-import './Interfaces/IDefaultPool.sol';
+import "./Interfaces/IDefaultPool.sol";
 import "./Dependencies/SafeMath.sol";
 import "./Dependencies/Ownable.sol";
 import "./Dependencies/CheckContract.sol";
@@ -14,14 +14,23 @@ import "./Dependencies/console.sol";
  *
  * When a trove makes an operation that applies its pending ETH and LUSD debt, its pending ETH and LUSD debt is moved
  * from the Default Pool to the Active Pool.
+ *
+ * 功能：持有以太币总余额并记录已清算的 Troves 的稳定币债务总额，这些 Troves 正在等待重新分配给活跃的 Troves。
+ * 如果 Trove 在默认池中有未决的以太币/债务“奖励”，那么当它下次进行借款人操作、赎回或清算时，它们将被应用到 Trove。
+ *
+ * 默认池持有已重新分配给活跃Trove但尚未“应用”的清算的ETH和LUSD债务（但不包括LUSD代币），即这些清算还未在接收方活跃Trove的结构体上记录。
+ * 当Trove执行将其挂起的ETH和LUSD债务应用的操作时，其挂起的ETH和LUSD债务将从默认池移动到活跃池。
+ *
  */
 contract DefaultPool is Ownable, CheckContract, IDefaultPool {
     using SafeMath for uint256;
 
+    string public constant NAME = "DefaultPool";
+
     address public troveManagerAddress;
     address public activePoolAddress;
-    uint256 internal ETH;  // deposited ETH tracker
-    uint256 internal LUSDDebt;  // debt
+    uint256 internal ETH; // deposited ETH tracker
+    uint256 internal LUSDDebt; // debt
 
     event TroveManagerAddressChanged(address _newTroveManagerAddress);
     event DefaultPoolLUSDDebtUpdated(uint _LUSDDebt);
@@ -32,10 +41,7 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
     function setAddresses(
         address _troveManagerAddress,
         address _activePoolAddress
-    )
-        external
-        onlyOwner
-    {
+    ) external onlyOwner {
         checkContract(_troveManagerAddress);
         checkContract(_activePoolAddress);
 
@@ -51,10 +57,10 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
     // --- Getters for public variables. Required by IPool interface ---
 
     /*
-    * Returns the ETH state variable.
-    *
-    * Not necessarily equal to the the contract's raw ETH balance - ether can be forcibly sent to contracts.
-    */
+     * Returns the ETH state variable.
+     *
+     * Not necessarily equal to the the contract's raw ETH balance - ether can be forcibly sent to contracts.
+     */
     function getETH() external view override returns (uint) {
         return ETH;
     }
@@ -72,7 +78,7 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
         emit DefaultPoolETHBalanceUpdated(ETH);
         emit EtherSent(activePool, _amount);
 
-        (bool success, ) = activePool.call{ value: _amount }("");
+        (bool success, ) = activePool.call{value: _amount}("");
         require(success, "DefaultPool: sending ETH failed");
     }
 
@@ -91,11 +97,17 @@ contract DefaultPool is Ownable, CheckContract, IDefaultPool {
     // --- 'require' functions ---
 
     function _requireCallerIsActivePool() internal view {
-        require(msg.sender == activePoolAddress, "DefaultPool: Caller is not the ActivePool");
+        require(
+            msg.sender == activePoolAddress,
+            "DefaultPool: Caller is not the ActivePool"
+        );
     }
 
     function _requireCallerIsTroveManager() internal view {
-        require(msg.sender == troveManagerAddress, "DefaultPool: Caller is not the TroveManager");
+        require(
+            msg.sender == troveManagerAddress,
+            "DefaultPool: Caller is not the TroveManager"
+        );
     }
 
     // --- Fallback function ---
