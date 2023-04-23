@@ -175,7 +175,7 @@ contract SortedTroves is Ownable, CheckContract, ISortedTroves {
             data.nodes[prevId].nextId = _id;
             data.nodes[nextId].prevId = _id;
         }
-
+        console.log(_id, _NICR);
         data.size = data.size.add(1);
         emit NodeAdded(_id, _NICR);
     }

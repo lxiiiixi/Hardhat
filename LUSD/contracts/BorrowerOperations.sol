@@ -68,14 +68,14 @@ contract BorrowerOperations is
     }
 
     struct LocalVariables_openTrove {
-        uint price;
-        uint LUSDFee;
-        uint netDebt;
-        uint compositeDebt;
-        uint ICR;
-        uint NICR;
-        uint stake;
-        uint arrayIndex;
+        uint price; // ETH:USD 价格
+        uint LUSDFee; // (如果不恢复模式)通过 troveManager.getBorrowingFee(_LUSDAmount) 计算得到的 LUSD 借款费用
+        uint netDebt; // (如果不恢复模式)netDebt = _LUSDAmount + LUSDFee,(如果是恢复模式)netDebt = _LUSDAmount
+        uint compositeDebt; // netDebt + LUSD_GAS_COMPENSATION(200e18)
+        uint ICR; // (compositeDebt>0)ICR = msg.value * price
+        uint NICR; // msg.value * 1e20 / compositeDebt
+        uint stake; // 当前调用者在 troveManager 中创建的 Trove 的 stake 数量
+        uint arrayIndex; // 当前 Trove 在 troveManager 中存储的所有 Troves 中的索引
     }
 
     struct ContractsCache {
@@ -192,6 +192,7 @@ contract BorrowerOperations is
 
         vars.price = priceFeed.fetchPrice(); // ETH:USD 价格
         bool isRecoveryMode = _checkRecoveryMode(vars.price); // LiquityBase 合约中的方法，检查是否处于恢复模式(当 Total Collateral Ratio < 150% 时，进入恢复模式)
+        console.log("vars.price:", vars.price);
 
         _requireValidMaxFeePercentage(_maxFeePercentage, isRecoveryMode); // 检查最大费用百分比是否合法
         _requireTroveisNotActive(contractsCache.troveManager, msg.sender); // 检查当前调用者是否已经有 trove
@@ -200,7 +201,11 @@ contract BorrowerOperations is
         vars.netDebt = _LUSDAmount;
 
         if (!isRecoveryMode) {
-            // 如果不是恢复模式，计算 LUSD 借款费用
+            // 如果不是恢复模式，计算 LUSD 借款费用并mint这个数量的 LUSD 给 LQTY staking 合约
+            // what _triggerBorrowingFee do: (根据计算得到的 LUSD, _maxFeePercentage 和 _LUSDAmount 确保用户可以接受多余的费用 )
+            // 1. calculate the LUSD fee
+            // 2. send fee to LQTY staking contract
+            // 3. mint LUSD to the LQTY staking contract()
             vars.LUSDFee = _triggerBorrowingFee(
                 contractsCache.troveManager,
                 contractsCache.lusdToken,
@@ -208,12 +213,13 @@ contract BorrowerOperations is
                 _maxFeePercentage
             );
             vars.netDebt = vars.netDebt.add(vars.LUSDFee); // 借款费用 + 借款金额
+            console.log(isRecoveryMode, vars.LUSDFee, vars.netDebt);
         }
         _requireAtLeastMinNetDebt(vars.netDebt); // 检查借款金额是否大于最小借款金额
 
         // ICR is based on the composite debt, i.e. the requested LUSD amount + LUSD borrowing fee + LUSD gas comp.
         // ICR（Initial Collateral Ratio - 初始保证金比率）基于组合债务，即请求的LUSD金额+LUSD借款费用+LUSD燃气补偿。
-        vars.compositeDebt = _getCompositeDebt(vars.netDebt);
+        vars.compositeDebt = _getCompositeDebt(vars.netDebt); // vars.netDebt +  LUSD_GAS_COMPENSATION
         assert(vars.compositeDebt > 0);
 
         vars.ICR = LiquityMath._computeCR(
@@ -230,6 +236,7 @@ contract BorrowerOperations is
             _requireICRisAboveCCR(vars.ICR);
         } else {
             _requireICRisAboveMCR(vars.ICR);
+            // 计算系统的总抵押率 TCR，确保 TCR < 系统关键抵押率 CCR(150%)
             uint newTCR = _getNewTCRFromTroveChange(
                 msg.value,
                 true,
@@ -240,17 +247,33 @@ contract BorrowerOperations is
             _requireNewTCRisAboveCCR(newTCR);
         }
 
+        // 上面都是对于 var 结构体变量的一些计算和赋值操作
+        // 下面开始对于合约的一些操作
+        /**
+         * troveManager：
+         * 1. setTroveStatus：记录当前 Trove 的状态为 Active
+         * 2. increaseTroveColl：记录当前 Trove 的抵押物数量
+         * 3. increaseTroveDebt：记录当前 Trove 的债务数量
+         * 4. updateTroveRewardSnapshots：更新当前 Trove 在 TroveRewardSnapshots 中的快照
+         * 5. updateStakeAndTotalStakes：更新并记录当前 Trove 的抵押物价值 stake
+         * 6. addTroveOwnerToArray：将当前 Trove 的地址添加到 Trove 所有者列表中
+         *
+         * sortedTroves：
+         * 1. insert：将当前 Trove 插入到 sortedTroves 中
+         */
+
         // Set the trove struct's properties
         contractsCache.troveManager.setTroveStatus(msg.sender, 1); // 记录当前 Trove 的状态为 Active
         contractsCache.troveManager.increaseTroveColl(msg.sender, msg.value); // 记录当前 Trove 的抵押物数量
-        contractsCache.troveManager.increaseTroveDebt( // 记录当前 Trove 的债务数量
+        contractsCache.troveManager.increaseTroveDebt( // 记录当前 Trove 的混合债务数量
             msg.sender,
             vars.compositeDebt
         );
 
-        contractsCache.troveManager.updateTroveRewardSnapshots(msg.sender); // 更新当前 Trove 的奖励快照
-        vars.stake = contractsCache.troveManager.updateStakeAndTotalStakes( // 更新并记录当前 Trove 的抵押物价值
-            msg.sender
+        contractsCache.troveManager.updateTroveRewardSnapshots(msg.sender); // 更新当前 Trove 在 TroveRewardSnapshots 中的快照
+        // 根据msg.value计算当前Trove新的抵押物价值
+        vars.stake = contractsCache.troveManager.updateStakeAndTotalStakes(
+            msg.sender // emit TotalStakesUpdated(totalStakes);
         );
 
         sortedTroves.insert(msg.sender, vars.NICR, _upperHint, _lowerHint); // 将当前 Trove 插入到 Trove 双向链表中
@@ -260,8 +283,9 @@ contract BorrowerOperations is
         emit TroveCreated(msg.sender, vars.arrayIndex);
 
         // Move the ether to the Active Pool, and mint the LUSDAmount to the borrower
-        // 将以太币转移到 Active Pool 并向借款人铸造LUSD金额。
+        // 将以太币转移到 Active Pool
         _activePoolAddColl(contractsCache.activePool, msg.value);
+        // 增加 Active Pool 中记录的LUSD借款数量（vars.netDebt），并 mint LUSDAmount 数量的 LUSD 给借款人
         _withdrawLUSD(
             contractsCache.activePool,
             contractsCache.lusdToken,
@@ -270,6 +294,7 @@ contract BorrowerOperations is
             vars.netDebt
         );
         // Move the LUSD gas compensation to the Gas Pool
+        // 和上述同理，只不过是将 LUSD_GAS_COMPENSATION 数量的 LUSD 给 Gas Pool
         _withdrawLUSD(
             contractsCache.activePool,
             contractsCache.lusdToken,
@@ -277,6 +302,8 @@ contract BorrowerOperations is
             LUSD_GAS_COMPENSATION,
             LUSD_GAS_COMPENSATION
         );
+
+        // Active Pool 中增加了两次 LUSD 的借款数量，分别是 vars.netDebt 和 LUSD_GAS_COMPENSATION
 
         emit TroveUpdated(
             msg.sender,
@@ -379,20 +406,23 @@ contract BorrowerOperations is
 
     /*
      * _adjustTrove(): Alongside a debt change, this function can perform either a collateral top-up or a collateral withdrawal.
-     *
      * It therefore expects either a positive msg.value, or a positive _collWithdrawal argument.
-     *
      * If both are positive, it will revert.
+     *
+     * 除了债务变化外，此函数还可以执行抵押品的补充或提取。
+     * 因此，它期望正的 msg.value 或正的 _collWithdrawal 参数。如果两者都是正数，它将会回滚。
+     *
      */
     function _adjustTrove(
-        address _borrower,
-        uint _collWithdrawal,
-        uint _LUSDChange,
-        bool _isDebtIncrease,
-        address _upperHint,
-        address _lowerHint,
+        address _borrower, // 借款人地址
+        uint _collWithdrawal, // 抵押物提取/存入数量
+        uint _LUSDChange, // 借入/偿还的 LUSD 数量
+        bool _isDebtIncrease, // 是否继续借入 LUSD（债务是否增加）
+        address _upperHint, // 上一个 Trove 的地址
+        address _lowerHint, // 下一个 Trove 的地址
         uint _maxFeePercentage
     ) internal {
+        // 这里声明了一个名为 contractsCache 的 ContractsCache 结构体变量，并将其初始化为一个新的 ContractsCache 对象。
         ContractsCache memory contractsCache = ContractsCache(
             troveManager,
             activePool,
@@ -400,14 +430,14 @@ contract BorrowerOperations is
         );
         LocalVariables_adjustTrove memory vars;
 
-        vars.price = priceFeed.fetchPrice();
-        bool isRecoveryMode = _checkRecoveryMode(vars.price);
+        vars.price = priceFeed.fetchPrice(); // 获取当前的 ETH:USD 价格
+        bool isRecoveryMode = _checkRecoveryMode(vars.price); // 检查是否处于 Recovery Mode
 
         if (_isDebtIncrease) {
             _requireValidMaxFeePercentage(_maxFeePercentage, isRecoveryMode);
             _requireNonZeroDebtChange(_LUSDChange);
         }
-        _requireSingularCollChange(_collWithdrawal);
+        _requireSingularCollChange(_collWithdrawal); // 保证用户是抵押（抵押物提取的数量_collWithdrawal为0）
         _requireNonZeroAdjustment(_collWithdrawal, _LUSDChange);
         _requireTroveisActive(contractsCache.troveManager, _borrower);
 
@@ -422,15 +452,17 @@ contract BorrowerOperations is
         contractsCache.troveManager.applyPendingRewards(_borrower);
 
         // Get the collChange based on whether or not ETH was sent in the transaction
+        // 根据是否在交易中发送了 ETH 来获判断本次操作是抵押还是提取
         (vars.collChange, vars.isCollIncrease) = _getCollChange(
-            msg.value,
-            _collWithdrawal
+            msg.value, // 如果是抵押，msg.value 为抵押物
+            _collWithdrawal // 如果是提取，_collWithdrawal 为提取的抵押物数量
         );
 
         vars.netDebtChange = _LUSDChange;
 
         // If the adjustment incorporates a debt increase and system is in Normal Mode, then trigger a borrowing fee
         if (_isDebtIncrease && !isRecoveryMode) {
+            // 计算本次借入的 LUSD 的手续费并增加债务
             vars.LUSDFee = _triggerBorrowingFee(
                 contractsCache.troveManager,
                 contractsCache.lusdToken,
@@ -522,26 +554,31 @@ contract BorrowerOperations is
         );
     }
 
+    // send all remaining eth from ActivePool to msg.sender
     function closeTrove() external override {
         ITroveManager troveManagerCached = troveManager;
         IActivePool activePoolCached = activePool;
         ILUSDToken lusdTokenCached = lusdToken;
 
-        _requireTroveisActive(troveManagerCached, msg.sender);
+        _requireTroveisActive(troveManagerCached, msg.sender); // 确保用户的 Trove 是 active 状态
         uint price = priceFeed.fetchPrice();
         _requireNotInRecoveryMode(price);
 
+        // 查询当前用户是否有待领取的 LQTY 奖励，如果有，则先领取
         troveManagerCached.applyPendingRewards(msg.sender);
 
+        // 分别查询当前用户的 Trove 的抵押物和债务
         uint coll = troveManagerCached.getTroveColl(msg.sender);
         uint debt = troveManagerCached.getTroveDebt(msg.sender);
 
+        // 需要保证用户的 LUSD 余额 >= 用户减去了存在gaspool中的的混合债务（借款数量+需要支付的借款费）
         _requireSufficientLUSDBalance(
             lusdTokenCached,
             msg.sender,
             debt.sub(LUSD_GAS_COMPENSATION)
         );
 
+        // 计算系统新的总抵押率并确保高于系统关键抵押率CCR（触发恢复模式）
         uint newTCR = _getNewTCRFromTroveChange(
             coll,
             false,
@@ -551,8 +588,8 @@ contract BorrowerOperations is
         );
         _requireNewTCRisAboveCCR(newTCR);
 
-        troveManagerCached.removeStake(msg.sender);
-        troveManagerCached.closeTrove(msg.sender);
+        troveManagerCached.removeStake(msg.sender); // 将用户的 stake 记录修改为 0
+        troveManagerCached.closeTrove(msg.sender); // 修改 Troves mapping 中当前用户的数据和状态
 
         emit TroveUpdated(msg.sender, 0, 0, 0, BorrowerOperation.closeTrove);
 
@@ -576,6 +613,7 @@ contract BorrowerOperations is
 
     /**
      * Claim remaining collateral from a redemption or from a liquidation with ICR > MCR in Recovery Mode
+     * 在 Recovery 模式下，通过赎回或清算中的 ICR > MCR 来索取剩余抵押物。
      */
     function claimCollateral() external override {
         // send ETH from CollSurplus Pool to owner
@@ -597,6 +635,7 @@ contract BorrowerOperations is
 
         // Send fee to LQTY staking contract
         lqtyStaking.increaseF_LUSD(LUSDFee); // 将LUSD借款费用增加到LQTY质押合约中
+        console.log("123123", LUSDFee);
         _lusdToken.mint(lqtyStakingAddress, LUSDFee); // 将LUSD借款费用增加到LQTY质押合约中
 
         return LUSDFee;
@@ -830,6 +869,7 @@ contract BorrowerOperations is
         );
     }
 
+    // 确保 系统的总抵押率 TCR < 系统关键抵押率 CCR(150%)
     function _requireNewTCRisAboveCCR(uint _newTCR) internal pure {
         require(
             _newTCR >= CCR,

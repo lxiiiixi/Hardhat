@@ -333,6 +333,7 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
     // --- Trove Liquidation functions ---
 
     // Single liquidation function. Closes the trove if its ICR is lower than the minimum collateral ratio.
+    // 清算函数，可以关闭 ICR 小于最小质押率的 Trove
     function liquidate(address _borrower) external override {
         _requireTroveIsActive(_borrower);
 
@@ -344,6 +345,7 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
     // --- Inner single liquidation functions ---
 
     // Liquidate one trove, in Normal Mode.
+    // 在正常模式下清算一个 Trove
     function _liquidateNormalMode(
         IActivePool _activePool,
         IDefaultPool _defaultPool,
@@ -357,21 +359,21 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
             singleLiquidation.entireTroveColl,
             vars.pendingDebtReward,
             vars.pendingCollReward
-        ) = getEntireDebtAndColl(_borrower);
+        ) = getEntireDebtAndColl(_borrower); // 获取整个 Trove 包括Pending在内的债务和抵押物
 
         _movePendingTroveRewardsToActivePool(
             _activePool,
             _defaultPool,
             vars.pendingDebtReward,
             vars.pendingCollReward
-        );
-        _removeStake(_borrower);
+        ); // 将Pending的奖励转移到ActivePool
+        _removeStake(_borrower); // 移除抵押物（将记录的抵押总量减少，将当前borrower的抵押数量记录置0）
 
         singleLiquidation.collGasCompensation = _getCollGasCompensation(
             singleLiquidation.entireTroveColl
         );
         singleLiquidation.LUSDGasCompensation = LUSD_GAS_COMPENSATION;
-        uint collToLiquidate = singleLiquidation.entireTroveColl.sub(
+        uint collToLiquidate = singleLiquidation.entireTroveColl.sub( // 需要清算的抵押物数量
             singleLiquidation.collGasCompensation
         );
 
@@ -556,6 +558,8 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
 
     /* In a full liquidation, returns the values for a trove's coll and debt to be offset, and coll and debt to be
      * redistributed to active troves.
+     * 在一个完整的清算中，计算返回一个trove的coll和debt的值用于进行抵消，将这些coll和debt用于重新分配给活跃的troves。
+     * 这个函数主要是处理稳定池中有该用户抵押的LUSD的情况，计算稳定池可以抵押的债务，和抵押之后还需要偿还的债务。
      */
     function _getOffsetAndRedistributionVals(
         uint _debt,
@@ -565,27 +569,33 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
         internal
         pure
         returns (
-            uint debtToOffset,
-            uint collToSendToSP,
-            uint debtToRedistribute,
-            uint collToRedistribute
+            uint debtToOffset, // 需要抵消的债务金额
+            uint collToSendToSP, // 需要发送到稳定池的collateral金额
+            uint debtToRedistribute, // 需要重新分配的债务金额
+            uint collToRedistribute // 需要重新分配的collateral金额
         )
     {
         if (_LUSDInStabPool > 0) {
+            // 如果稳定池中有该用户抵押的LUSD
             /*
-             * Offset as much debt & collateral as possible against the Stability Pool, and redistribute the remainder
-             * between all active troves.
-             *
+             * Offset as much debt & collateral as possible against the Stability Pool, and redistribute the remainder between all active troves.
              *  If the trove's debt is larger than the deposited LUSD in the Stability Pool:
-             *
              *  - Offset an amount of the trove's debt equal to the LUSD in the Stability Pool
              *  - Send a fraction of the trove's collateral to the Stability Pool, equal to the fraction of its offset debt
              *
+             * 尽可能地使用稳定池中的LUSD来抵消当前trove的debt和collateral，将剩余的部分重新分配给所有活跃的troves。
+             * 如果trove的debt大于稳定池中的LUSD：
+             *  - 将trove的debt抵消的部分设置为稳定池中的LUSD
+             *  - 将trove的collateral的一部分发送到稳定池中，这部分collateral的数量等于抵消的debt的数量
              */
+            // 计算需要抵消的债务（取较小的那个值，如论如何都只会抵消较少的量，如果_debt<_LUSDInStabPool，则_LUSDInStabPool中还会有剩余，相反Pool中的LUSD会被清空则还会有没还清的债务）
             debtToOffset = LiquityMath._min(_debt, _LUSDInStabPool);
-            collToSendToSP = _coll.mul(debtToOffset).div(_debt);
-            debtToRedistribute = _debt.sub(debtToOffset);
-            collToRedistribute = _coll.sub(collToSendToSP);
+            collToSendToSP = _coll.mul(debtToOffset).div(_debt); // 计算要发送到稳定池中的collateral数量
+            // 抵押物为什么要发送到稳定池？
+            // 如果债务金额大于稳定池中的LUSD数量，就需要按照【需要抵消的债务/所有债务】这个比例发送抵押物到稳定池中（抵消稳定池中LUSD的减少保持系统的稳定性），然后将剩余的抵押物重新分配给所有活跃的troves
+            // 如果债务金额小于稳定池中的LUSD数量，就不需要发送抵押物到稳定池中（【需要抵消的债务/所有债务】比例为1），直接将剩余的抵押物重新分配给所有活跃的troves
+            debtToRedistribute = _debt.sub(debtToOffset); // 计算需要重新分配的债务
+            collToRedistribute = _coll.sub(collToSendToSP); // 计算需要重新分配的collateral
         } else {
             debtToOffset = 0;
             collToSendToSP = 0;
@@ -1281,6 +1291,9 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
      * redemption will stop after the last completely redeemed Trove and the sender will keep the remaining LUSD amount, which they can attempt
      * to redeem later.
      */
+    /**
+     * 赎回抵押品
+     */
     function redeemCollateral(
         uint _LUSDamount,
         address _firstRedemptionHint,
@@ -1484,6 +1497,7 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
     }
 
     // Add the borrowers's coll and debt rewards earned from redistributions, to their Trove
+    // 将借款人从重新分配中获得的coll和debt奖励添加到其Trove中
     function _applyPendingRewards(
         IActivePool _activePool,
         IDefaultPool _defaultPool,
@@ -1589,6 +1603,8 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
          * A Trove has pending rewards if its snapshot is less than the current rewards per-unit-staked sum:
          * this indicates that rewards have occured since the snapshot was made, and the user therefore has
          * pending rewards
+         *
+         * 如果一个 Trove 的快照小于当前每单位抵押奖励总和，则该 Trove 有待领取的奖励：这表明自快照以来已经发生奖励，并且用户因此具有待处理的奖励
          */
         if (Troves[_borrower].status != Status.active) {
             return false;
@@ -1645,11 +1661,19 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
     function _updateStakeAndTotalStakes(
         address _borrower
     ) internal returns (uint) {
-        uint newStake = _computeNewStake(Troves[_borrower].coll);
+        uint newStake = _computeNewStake(Troves[_borrower].coll); // 根据新增的 ETH 计算新的质押品价值
         uint oldStake = Troves[_borrower].stake;
         Troves[_borrower].stake = newStake;
 
-        totalStakes = totalStakes.sub(oldStake).add(newStake);
+        totalStakes = totalStakes.sub(oldStake).add(newStake); // 更新 totalStakes
+
+        console.log(
+            "TroveManager",
+            totalCollateralSnapshot,
+            Troves[_borrower].coll,
+            totalStakes
+        );
+
         emit TotalStakesUpdated(totalStakes);
 
         return newStake;
@@ -1794,6 +1818,8 @@ contract TroveManager is LiquityBase, Ownable, CheckContract, ITroveManager {
 
         // Push the Troveowner to the array
         TroveOwners.push(_borrower);
+
+        console.log("TroveOwners.length: %s", TroveOwners.length);
 
         // Record the index of the new Troveowner on their Trove struct
         index = uint128(TroveOwners.length.sub(1));

@@ -39,7 +39,7 @@ contract LockupContract {
     ILQTYToken public lqtyToken;
 
     // Unlock time is the Unix point in time at which the beneficiary can withdraw.
-    uint public unlockTime;
+    uint public unlockTime; // 指受益人可以提取资金的Unix时间戳。
 
     // --- Events ---
 

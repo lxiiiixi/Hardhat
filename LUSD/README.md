@@ -858,7 +858,7 @@ Deposit functionality is handled by `StabilityPool.sol` (`provideToSP`, `withdra
 When a liquidation is offset with the Stability Pool, debt from the liquidation is cancelled with an equal amount of LUSD in the pool, which is burned. 
 
 Individual deposits absorb the debt from the liquidated Trove in proportion to their deposit as a share of total deposits.
- 
+
 Similarly the liquidated Trove’s ETH is assigned to depositors in the same proportion.
 
 For example: a liquidation that empties 30% of the Stability Pool will reduce each deposit by 30%, no matter the size of the deposit.

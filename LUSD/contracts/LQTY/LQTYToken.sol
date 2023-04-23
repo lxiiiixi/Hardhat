@@ -163,7 +163,7 @@ contract LQTYToken is CheckContract, ILQTYToken {
         // --- Initial LQTY allocations ---
 
         uint bountyEntitlement = _1_MILLION.mul(2); // Allocate 2 million for bounties/hackathons
-        _mint(_bountyAddress, bountyEntitlement);
+        _mint(_bountyAddress, bountyEntitlement); // 作为 beneficiary 的奖励
 
         uint depositorsAndFrontEndsEntitlement = _1_MILLION.mul(32); // Allocate 32 million to the algorithmic issuance schedule
         _mint(_communityIssuanceAddress, depositorsAndFrontEndsEntitlement);

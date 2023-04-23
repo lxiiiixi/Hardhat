@@ -141,11 +141,23 @@
 
 ### 核心合约介绍
 
-- `BorrowerOperations.sol` - 包含借款人与其 Trove 交互的基本操作：Trove 创建、ETH 充值/取款、稳定币发行和还款。它还将发行费用发送到 LQTYStaking 合约。 BorrowerOperations 函数调用 TroveManager，告诉它在必要时更新 Trove 状态。 BorrowerOperations 函数还调用各种池，告诉他们在必要时在池之间或池 <> 用户之间移动以太币/代币。
+##### `BorrowerOperations.sol` 
+
+包含借款人与其 Trove 交互的基本操作：Trove 创建、ETH 充值/取款、稳定币发行和还款。它还将发行费用发送到 LQTYStaking 合约。 BorrowerOperations 函数调用 TroveManager，告诉它在必要时更新 Trove 状态。 BorrowerOperations 函数还调用各种池，告诉他们在必要时在池之间或池 <> 用户之间移动以太币/代币。
 
 > https://github.com/liquity/dev#launch-sequence-and-vesting-process
 >
 > 等待后续总结补充
+
+| Function                     | ETH quantity                        | Path                                       |
+| ---------------------------- | ----------------------------------- | ------------------------------------------ |
+| openTrove                    | msg.value                           | msg.sender->BorrowerOperations->ActivePool |
+| addColl                      | msg.value                           | msg.sender->BorrowerOperations->ActivePool |
+| withdrawColl                 | _collWithdrawal parameter           | ActivePool->msg.sender                     |
+| adjustTrove: adding ETH      | msg.value                           | msg.sender->BorrowerOperations->ActivePool |
+| adjustTrove: withdrawing ETH | _collWithdrawal parameter           | ActivePool->msg.sender                     |
+| closeTrove                   | All remaining                       | ActivePool->msg.sender                     |
+| claimCollateral              | CollSurplusPool.balance[msg.sender] | CollSurplusPool->msg.sender                |
 
 ## Operation
 
@@ -156,6 +168,8 @@
 **添加一个 Trove**
 
 <img src="https://cdn.jsdelivr.net/gh/lxiiiixi/Image-Hosting/Markdown/image-20230411162001236.png" alt="image-20230411162001236" style="zoom: 50%;" />
+
+
 
 **Stability Pool**
 
@@ -252,7 +266,7 @@ LQTY 并不是一个治理代币，根据 Liquity 的经济模型，除了卖掉
 
 - Liquidation and the Stability Pool
 
-  Liquity 按以下优先顺序使用两步清算机制：
+   Liquity 按以下优先顺序使用两步清算机制：
 
   1. 抵消包含 LUSD 代币的稳定池中抵押不足的 Troves
   2. 如果稳定池清空，将抵押不足的 Troves 重新分配给其他借款人
@@ -281,21 +295,25 @@ LQTY 并不是一个治理代币，根据 Liquity 的经济模型，除了卖掉
     >
     > - MCR（Minimum Collateralization Ratio - 抵押品最低抵押比率）
     >
-    >   它是指保障抵押品价值的最低要求，以确保抵押品的价值不会低于贷款金额，从而保护借款人和投资者的利益。
+    >   它是指保障抵押品价值的最低要求，以确保抵押品的价值不会低于贷款金额，从而保护借款人和投资者的利益
     >
     >   例如，在一个抵押债务平台上，MCR设定为110%，这意味着借款人需要提供抵押品，其价值至少为贷款金额的110%。如果抵押品的价值下降到低于MCR，则该债务头寸就会被自动清算，以保护借款人和投资者的利益。
-
+    >   
+    > - CCR （Critical system collateral ratio - 系统关键抵押率）
+    >
+    >   150%（如果系统的总抵押率低于 CCR，将会触发恢复模式）
+    
     #### Liquidations in Normal Mode: TCR >= 150%
-
+    
     | Condition                         | Liquidation behavior                                         |
     | --------------------------------- | ------------------------------------------------------------ |
     | ICR < MCR & SP.LUSD >= trove.debt | StabilityPool 中等于 Trove 债务的 LUSD 被 Trove 债务抵消。 Trove 的 ETH 抵押品由储户共享。 |
     | ICR < MCR & SP.LUSD < trove.debt  | StabilityPool 的 LUSD 总额被来自 Trove 的等量债务所抵消。储户共享 Trove 抵押品的一小部分（等于其抵消债务与其全部债务的比率）。剩余的债务和抵押品（减去 ETH gas 补偿）被重新分配给活跃的 Troves |
     | ICR < MCR & SP.LUSD = 0           | 将所有债务和抵押品（减去 ETH 气体补偿）重新分配给活跃的 Troves。 |
     | ICR >= MCR                        | Do nothing.                                                  |
-
+    
     #### Liquidations in Recovery Mode: TCR < 150%
-
+    
     | Condition                                | Liquidation behavior                                         |
     | ---------------------------------------- | ------------------------------------------------------------ |
     | ICR <=100%                               | 将所有债务和抵押品（减去 ETH 气体补偿）重新分配给活跃的 Troves。 |
@@ -335,7 +353,7 @@ LQTY 并不是一个治理代币，根据 Liquity 的经济模型，除了卖掉
 
 
 
-
+- 稳定池的作用：用户可以通过存入 LUSD 到稳定池中来获取 ETH 和 LQTY
 
 
 
