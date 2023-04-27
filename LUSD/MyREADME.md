@@ -1,7 +1,10 @@
+> - Official: https://liquity.fi/
 > - Doc: https://docs.liquity.org/v/cn/
 > - Contract Code: https://github.com/liquity/beta
+> - Dev Code: https://github.com/liquity/dev/blob/main/README.md
 > - Defillama: https://defillama.com/protocol/liquity
 > - DevUI: https://eth.liquity.fi/
+> - Online Contract: https://docs.liquity.org/documentation/resources
 
 ## Introduction
 
