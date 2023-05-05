@@ -1,5 +1,7 @@
 pragma solidity ^0.5.16;
 
+// 用于报告合约内部的错误，并发出事件以指示发生的错误类型
+
 contract VAIVaultErrorReporter {
     enum Error {
         NO_ERROR,
@@ -31,7 +33,11 @@ contract VAIVaultErrorReporter {
     /**
      * @dev use this when reporting an opaque error from an upgradeable collaborator contract
      */
-    function failOpaque(Error err, FailureInfo info, uint opaqueError) internal returns (uint) {
+    function failOpaque(
+        Error err,
+        FailureInfo info,
+        uint opaqueError
+    ) internal returns (uint) {
         emit Failure(uint(err), uint(info), opaqueError);
 
         return uint(err);

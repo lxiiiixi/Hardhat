@@ -5,6 +5,9 @@ import "../Utils/IBEP20.sol";
 import "./VAIVaultStorage.sol";
 import "./VAIVaultErrorReporter.sol";
 import "@venusprotocol/governance-contracts/contracts/Governance/AccessControlledV5.sol";
+import "hardhat/console.sol";
+
+// VAIVault 和 VAIVaultProxy 两者之间是代理/实现模式
 
 interface IVAIVaultProxy {
     function _acceptImplementation() external returns (uint);
@@ -95,6 +98,7 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
         // Transfer in the amounts from user
         if (_amount > 0) {
             vai.safeTransferFrom(address(msg.sender), address(this), _amount);
+            // vai.transferFrom(address(msg.sender), address(this), _amount);
             user.amount = user.amount.add(_amount);
         }
 
@@ -162,6 +166,7 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
      */
     function updateAndPayOutPending(address account) internal {
         uint256 pending = pendingXVS(account);
+        console.log("pending", pending);
 
         if (pending > 0) {
             safeXVSTransfer(account, pending);
@@ -183,6 +188,7 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
             xvs.transfer(_to, _amount);
             xvsBalance = xvs.balanceOf(address(this));
         }
+        console.log("xvsBalance", xvsBalance);
     }
 
     /**
@@ -207,7 +213,13 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
             return;
         }
 
-        accXVSPerShare = accXVSPerShare.add(pendingRewards.mul(1e18).div(vaiBalance));
+        console.log("pendingRewards", pendingRewards);
+        console.log("vaiBalance", vaiBalance);
+
+        accXVSPerShare = accXVSPerShare.add(
+            pendingRewards.mul(1e18).div(vaiBalance)
+        );
+        console.log("accXVSPerShare", accXVSPerShare);
         pendingRewards = 0;
     }
 
@@ -238,12 +250,21 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
     /*** Admin Functions ***/
 
     function _become(IVAIVaultProxy vaiVaultProxy) external {
-        require(msg.sender == vaiVaultProxy.admin(), "only proxy admin can change brains");
-        require(vaiVaultProxy._acceptImplementation() == 0, "change not authorized");
+        require(
+            msg.sender == vaiVaultProxy.admin(),
+            "only proxy admin can change brains"
+        );
+        require(
+            vaiVaultProxy._acceptImplementation() == 0,
+            "change not authorized"
+        );
     }
 
     function setVenusInfo(address _xvs, address _vai) external onlyAdmin {
-        require(_xvs != address(0) && _vai != address(0), "addresses must not be zero");
+        require(
+            _xvs != address(0) && _vai != address(0),
+            "addresses must not be zero"
+        );
         xvs = IBEP20(_xvs);
         vai = IBEP20(_vai);
 
@@ -255,7 +276,9 @@ contract VAIVault is VAIVaultStorage, AccessControlledV5 {
      * @dev Admin function to set the access control address
      * @param newAccessControlAddress New address for the access control
      */
-    function setAccessControl(address newAccessControlAddress) external onlyAdmin {
+    function setAccessControl(
+        address newAccessControlAddress
+    ) external onlyAdmin {
         _setAccessControlManager(newAccessControlAddress);
     }
 }

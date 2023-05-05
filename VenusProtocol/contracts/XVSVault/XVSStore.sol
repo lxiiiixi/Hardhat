@@ -2,6 +2,8 @@ pragma solidity 0.5.16;
 import "../Utils/SafeBEP20.sol";
 import "../Utils/IBEP20.sol";
 
+// import "hardhat/console.sol";
+
 contract XVSStore {
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
@@ -42,7 +44,11 @@ contract XVSStore {
     }
 
     // Safe reward token transfer function, just in case if rounding error causes pool to not have enough tokens.
-    function safeRewardTransfer(address token, address _to, uint256 _amount) external onlyOwner {
+    function safeRewardTransfer(
+        address token,
+        address _to,
+        uint256 _amount
+    ) external onlyOwner {
         require(rewardTokens[token] == true, "only reward token can");
 
         if (address(token) != address(0)) {
@@ -81,11 +87,17 @@ contract XVSStore {
     }
 
     function setRewardToken(address _tokenAddress, bool status) external {
-        require(msg.sender == admin || msg.sender == owner, "only admin or owner can");
+        require(
+            msg.sender == admin || msg.sender == owner,
+            "only admin or owner can"
+        );
         rewardTokens[_tokenAddress] = status;
     }
 
-    function emergencyRewardWithdraw(address _tokenAddress, uint256 _amount) external onlyOwner {
+    function emergencyRewardWithdraw(
+        address _tokenAddress,
+        uint256 _amount
+    ) external onlyOwner {
         IBEP20(_tokenAddress).safeTransfer(address(msg.sender), _amount);
     }
 }

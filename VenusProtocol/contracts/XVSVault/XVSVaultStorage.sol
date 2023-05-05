@@ -62,16 +62,20 @@ contract XVSVaultStorageV1 is XVSVaultAdminStorage {
     }
 
     // Info of each user that stakes tokens.
-    mapping(address => mapping(uint256 => mapping(address => UserInfo))) internal userInfos;
+    mapping(address => mapping(uint256 => mapping(address => UserInfo)))
+        internal userInfos;
 
     // Info of each pool.
     mapping(address => PoolInfo[]) public poolInfos;
 
     // Total allocation points. Must be the sum of all allocation points in all pools.
     mapping(address => uint256) public totalAllocPoints;
+    // "allocation point" 通常指的是在流动性挖矿或收益农场项目中，分配给特定池子的相对权重或重要性。
+    // 这里的 totalAllocPoints 映射记录了该项目中每个池子的总分配点数，用于确定每个池子应该获得的奖励比例。
 
     // Info of requested but not yet executed withdrawals
-    mapping(address => mapping(uint256 => mapping(address => WithdrawalRequest[]))) internal withdrawalRequests;
+    mapping(address => mapping(uint256 => mapping(address => WithdrawalRequest[])))
+        internal withdrawalRequests;
 
     /// @notice DEPRECATED A record of each accounts delegate (before the voting power fix)
     mapping(address => address) private __oldDelegatesSlot;
@@ -83,7 +87,8 @@ contract XVSVaultStorageV1 is XVSVaultAdminStorage {
     }
 
     /// @notice DEPRECATED A record of votes checkpoints for each account, by index (before the voting power fix)
-    mapping(address => mapping(uint32 => Checkpoint)) private __oldCheckpointsSlot;
+    mapping(address => mapping(uint32 => Checkpoint))
+        private __oldCheckpointsSlot;
 
     /// @notice DEPRECATED The number of checkpoints for each account (before the voting power fix)
     mapping(address => uint32) private __oldNumCheckpointsSlot;
@@ -93,7 +98,9 @@ contract XVSVaultStorageV1 is XVSVaultAdminStorage {
 
     /// @notice The EIP-712 typehash for the contract's domain
     bytes32 public constant DOMAIN_TYPEHASH =
-        keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
+        keccak256(
+            "EIP712Domain(string name,uint256 chainId,address verifyingContract)"
+        );
 
     /// @notice The EIP-712 typehash for the delegation struct used by the contract
     bytes32 public constant DELEGATION_TYPEHASH =
@@ -111,7 +118,8 @@ contract XVSVaultStorage is XVSVaultStorageV1 {
     mapping(address => uint32) public numCheckpoints;
 
     /// @notice Tracks pending withdrawals for all users for a particular reward token and pool id
-    mapping(address => mapping(uint256 => uint256)) internal totalPendingWithdrawals;
+    mapping(address => mapping(uint256 => uint256))
+        internal totalPendingWithdrawals;
 
     /// @notice pause indicator for Vault
     bool public vaultPaused;

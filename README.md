@@ -38,3 +38,9 @@ liuxi@liuxideMacBook-Pro PNB % ./list_functions contracts/PinkBNB.sol
 Success! The result is written to PinkBNB.sol.md
 # 被写入到根目录下了
 ```
+
+## Hardhat 常用功能命令
+
+```bash
+npx hardhat flatten contracts/Foo.sol > Flattened.sol # 导出单一文件命令
+```
