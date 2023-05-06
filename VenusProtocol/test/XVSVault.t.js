@@ -86,13 +86,16 @@ describe("XVSVault Test", function () {
       const NRTInstance = await MockERC20.deploy("NewRewardToken", "NRT", ethers.utils.parseEther("30000000"));
       await DTInstance.approve(XVSVaultProxyInstance.address, depositAmount)
       await RTInstance.transfer(XVSVaultProxyInstance.address, depositAmount)
+      await XVSInstance.transfer(XVSVaultProxyInstance.address, ethers.utils.parseEther("30000000"))
       // add new token pool
       await XVSVaultProxyInstance.add(RTInstance.address, 100, DTInstance.address, ethers.utils.parseEther("1"), 86400000)
       await XVSVaultProxyInstance.add(NRTInstance.address, 100, DTInstance.address, ethers.utils.parseEther("1"), 86400000)
       await XVSVaultProxyInstance.deposit(RTInstance.address, 0, depositAmount);
-
       await XVSVaultProxyInstance.updatePool(RTInstance.address, 0)
       console.log(await XVSVaultProxyInstance.pendingReward(RTInstance.address, 0, admin.address));
+
+      await XVSVaultProxyInstance.claim(admin.address, RTInstance.address, 0);
+      console.log(await XVSInstance.balanceOf(admin.address));
     });
   });
 
