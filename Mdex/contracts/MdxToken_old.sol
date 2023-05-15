@@ -5,8 +5,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-contract MdxToken is ERC20Votes, Ownable {
-    uint256 public constant maxSupply = 1060000000 * 1e18;
+contract MdxTokenOld is ERC20Votes, Ownable {
+    uint256 public constant maxSupply = 1000000000 * 1e18; // the total supply
 
     using EnumerableSet for EnumerableSet.AddressSet;
     EnumerableSet.AddressSet private _miners;
@@ -55,5 +55,24 @@ contract MdxToken is ERC20Votes, Ownable {
             "MdxToken: index out of bounds"
         );
         return EnumerableSet.at(_miners, _index);
+    }
+
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override(ERC20Votes) {
+        super._afterTokenTransfer(from, to, amount);
+    }
+
+    function _mint(address to, uint256 amount) internal override(ERC20Votes) {
+        super._mint(to, amount);
+    }
+
+    function _burn(
+        address account,
+        uint256 amount
+    ) internal override(ERC20Votes) {
+        super._burn(account, amount);
     }
 }

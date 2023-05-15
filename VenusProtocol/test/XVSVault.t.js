@@ -114,7 +114,6 @@ describe("XVSVault Test", function () {
       expect(await XVSStoreInstance.admin()).to.equal(admin.address);
       expect(await XVSStoreInstance.pendingAdmin()).to.equal(AddressZero);
       expect(await XVSStoreInstance.owner()).to.equal(XVSVaultProxyInstance.address);
-
     });
   });
 });
