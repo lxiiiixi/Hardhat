@@ -191,9 +191,9 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
      *
      */
     function add(
-        address _rewardToken,
+        address _rewardToken, // 奖励代币
         uint256 _allocPoint,
-        IBEP20 _token,
+        IBEP20 _token, // 用户选择质押的代币
         uint256 _rewardPerBlock,
         uint256 _lockPeriod
     ) external {
@@ -220,7 +220,7 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
 
         poolInfo.push(
             PoolInfo({
-                token: _token,
+                token: _token, // PoolInfo.token 存的也是用户选择质押的代币
                 allocPoint: _allocPoint,
                 lastRewardBlock: block.number,
                 accRewardPerShare: 0,
@@ -311,6 +311,7 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
         PoolInfo storage pool = poolInfos[_rewardToken][_pid];
         UserInfo storage user = userInfos[_rewardToken][_pid][msg.sender];
         _updatePool(_rewardToken, _pid);
+
         require(
             pendingWithdrawalsBeforeUpgrade(_rewardToken, _pid, msg.sender) ==
                 0,
@@ -318,6 +319,7 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
         );
 
         if (user.amount > 0) {
+            // 不是第一次质押 amount有记录的情况
             uint256 pending = user
                 .amount
                 .sub(user.pendingWithdrawals)
@@ -329,6 +331,7 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
                 msg.sender,
                 pending
             );
+            console.log("pending", pending);
             emit Claim(msg.sender, _rewardToken, _pid, pending);
         }
         pool.token.safeTransferFrom(
@@ -371,6 +374,8 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
             "execute pending withdrawal"
         );
 
+        console.log("user.amount", user.amount);
+
         if (user.amount > 0) {
             uint256 pending = user
                 .amount
@@ -379,12 +384,17 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
                 .div(1e12)
                 .sub(user.rewardDebt);
 
+            console.log("pool.accRewardPerShare", pool.accRewardPerShare);
+            console.log("pending", pending);
+            console.log("user.rewardDebt", user.rewardDebt);
+
             if (pending > 0) {
                 user.rewardDebt = user
                     .amount
                     .sub(user.pendingWithdrawals)
                     .mul(pool.accRewardPerShare)
                     .div(1e12);
+                console.log("new user.rewardDebt", user.rewardDebt);
 
                 IXVSStore(xvsStore).safeRewardTransfer(
                     _rewardToken,
@@ -755,8 +765,11 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
         if (block.number <= pool.lastRewardBlock) {
             return;
         }
-        uint256 supply = pool.token.balanceOf(address(this)); // 当前合约中 RewardToken 的总量
+        uint256 supply = pool.token.balanceOf(address(this)); // 当前合约中用户质押 Token 的总量
+        console.log("token balance", supply);
         supply = supply.sub(totalPendingWithdrawals[_rewardToken][_pid]); // 减去当前 pending Withdrawal 状态的当前 RewardToken
+        console.log("supply except pending withdrawals", supply);
+
         if (supply == 0) {
             pool.lastRewardBlock = block.number;
             return;
@@ -764,13 +777,27 @@ contract XVSVault is XVSVaultStorage, ECDSA, AccessControlledV5 {
         uint256 curBlockNumber = block.number;
         uint256 multiplier = curBlockNumber.sub(pool.lastRewardBlock); // 区块间隔
         // reward = 区块间隔 * 该rewardToken每个区块的奖励 * 该池子的分配比例 / 所有池子的分配比例
+
+        console.log("multiplier", multiplier);
+        console.log(
+            "rewardTokenAmountsPerBlock[_rewardToken]",
+            rewardTokenAmountsPerBlock[_rewardToken]
+        );
+        console.log(
+            "totalAllocPoints[_rewardToken]",
+            totalAllocPoints[_rewardToken]
+        );
+
         uint256 reward = multiplier
             .mul(rewardTokenAmountsPerBlock[_rewardToken])
             .mul(pool.allocPoint)
             .div(totalAllocPoints[_rewardToken]);
+        console.log("reward", reward);
+
         pool.accRewardPerShare = pool.accRewardPerShare.add(
             reward.mul(1e12).div(supply)
         );
+        console.log("pool.accRewardPerShare", pool.accRewardPerShare);
 
         pool.lastRewardBlock = block.number;
     }

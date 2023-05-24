@@ -36,6 +36,7 @@ contract XVSVaultStorageV1 is XVSVaultAdminStorage {
     address public xvsAddress;
 
     // Reward tokens created per block indentified by reward token address.
+    // 注意每个 Reward token 对应的 rewardTokenAmountsPerBlock 是唯一的，即使是不同的池子
     mapping(address => uint256) public rewardTokenAmountsPerBlock;
 
     /// @notice Info of each user.

@@ -29,6 +29,15 @@ contract MdxToken is ERC20Votes, Ownable {
         return true;
     }
 
+    function burn(uint256 amount) external {
+        _burn(_msgSender(), amount);
+    }
+
+    function burnFrom(address account, uint256 amount) external {
+        _spendAllowance(account, _msgSender(), amount);
+        _burn(account, amount);
+    }
+
     function addMiner(address miner) external onlyOwner returns (bool) {
         require(miner != address(0), "MdxToken: miner is the zero address");
         return EnumerableSet.add(_miners, miner);

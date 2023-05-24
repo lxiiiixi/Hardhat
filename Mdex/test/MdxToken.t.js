@@ -4,12 +4,12 @@ const {
 const { expect } = require("chai");
 
 describe("MdxToken", function () {
-  let owner, miner1, miner2, addr1, addr2;
+  let owner, miner1, addr1, addr2;
   const maxSupply = ethers.utils.parseEther("1060000000");
   const ZERO_ADDRESS = ethers.constants.AddressZero;
 
   async function deployMdxToken() {
-    [owner, miner1, miner2, addr1, addr2] = await ethers.getSigners();
+    [owner, miner1, addr1, addr2] = await ethers.getSigners();
     const MdxToken = await ethers.getContractFactory("MdxToken");
     const MdxInstance = await MdxToken.deploy();
 
@@ -83,4 +83,28 @@ describe("MdxToken", function () {
     });
   });
 
+  describe("Test burn functions", function () {
+    it("Should burn tokens successfully", async function () {
+      const { MdxInstance } = await loadFixture(deployMdxToken);
+      await MdxInstance.addMiner(miner1.address);
+      const mintAmount = ethers.utils.parseEther("100");
+      await MdxInstance.connect(miner1).mint(addr1.address, mintAmount);
+      expect(await MdxInstance.balanceOf(addr1.address)).to.equal(mintAmount);
+      await MdxInstance.connect(addr1).burn(mintAmount)
+      expect(await MdxInstance.balanceOf(addr1.address)).to.equal(0);
+    });
+
+    it("Should burnFrom successfully only if caller have enough allowance", async function () {
+      const { MdxInstance } = await loadFixture(deployMdxToken);
+
+      await MdxInstance.addMiner(miner1.address);
+      const mintAmount = ethers.utils.parseEther("100");
+      await MdxInstance.connect(miner1).mint(addr1.address, mintAmount);
+      expect(await MdxInstance.balanceOf(addr1.address)).to.equal(mintAmount);
+      await expect(MdxInstance.burnFrom(addr1.address, mintAmount)).to.be.revertedWith("ERC20: insufficient allowance");
+      await MdxInstance.connect(addr1).approve(owner.address, mintAmount)
+      await MdxInstance.burnFrom(addr1.address, mintAmount)
+      expect(await MdxInstance.balanceOf(addr1.address)).to.equal(0);
+    });
+  });
 });

@@ -2,7 +2,7 @@ pragma solidity 0.5.16;
 import "../Utils/SafeBEP20.sol";
 import "../Utils/IBEP20.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract XVSStore {
     using SafeMath for uint256;
@@ -53,6 +53,7 @@ contract XVSStore {
 
         if (address(token) != address(0)) {
             uint256 tokenBalance = IBEP20(token).balanceOf(address(this));
+            console.log("tokenBalance", tokenBalance);
             if (_amount > tokenBalance) {
                 IBEP20(token).safeTransfer(_to, tokenBalance);
             } else {
