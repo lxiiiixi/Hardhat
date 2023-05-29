@@ -7,6 +7,7 @@ $ yarn init  # 包管理
 $ yarn add --dev hardhat
 $ npx hardhat # 初始化项目
 $ npx hardhat compile  # 编译
+$ yarn add @openzeppelin/contracts@3.0.x # 安装OpenZeppelin
 ```
 
 ## [Command-line replace and completion](https://hardhat.org/hardhat-runner/docs/guides/command-line-completion#command-line-completion)
