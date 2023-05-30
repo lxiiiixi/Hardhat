@@ -7,7 +7,7 @@ $ yarn init  # 包管理
 $ yarn add --dev hardhat
 $ npx hardhat # 初始化项目
 $ npx hardhat compile  # 编译
-$ yarn add @openzeppelin/contracts@3.0.x # 安装OpenZeppelin
+$ yarn add @openzeppelin/contracts@3.0.x # 安装OpenZeppelin(指定版本)
 ```
 
 ## [Command-line replace and completion](https://hardhat.org/hardhat-runner/docs/guides/command-line-completion#command-line-completion)
@@ -45,3 +45,17 @@ Success! The result is written to PinkBNB.sol.md
 ```bash
 npx hardhat flatten contracts/Foo.sol > Flattened.sol # 导出单一文件命令
 ```
+
+## OpenZeppelin - Solidity 版本对应关系
+
+> OpenZeppelin Doc: https://docs.openzeppelin.com/contracts/4.x/
+
+| Solidity | OpenZeppelin         |
+| -------- | -------------------- |
+| 0.5.x    | 2.3.x - 2.5.x        |
+| 0.6.x    | 3.0.x - 3.1.x 或 3.4 |
+| 0.7.x    | 3.2.x - 3.3.x 或 3.4 |
+| 0.8.x    | 4.0.x - 4.5.x        |
+
+> OpenZeppelin v3.4 兼容 sol v0.6 和 sol v0.7
+

@@ -6,6 +6,7 @@ import "./MasterChef.sol";
 contract MockERC777Attack is IERC777Recipient {
     bytes32 private constant _TOKENS_RECIPIENT_INTERFACE_HASH =
         keccak256("ERC777TokensRecipient");
+    // 当前合约对应了 ERC77 中的 token 接收者的身份，所以需要使用同一个 register 注册接收者身份才能实现这个代币的接收
     IERC20 token;
     IERC1820Registry internal registry;
     IMasterChef public vault; // Sushi MasterChef
@@ -28,7 +29,10 @@ contract MockERC777Attack is IERC777Recipient {
         );
     }
 
-    // IERC777Recipient 中需要实现的function，否则这个合约需要标记为抽象合约
+    // IERC777Recipient 中需要实现和覆盖的function
+    // 重入实现的关键就在这里
+    // 看ERC777代币的代码可以看出：ERC777代币的transfer函数调用_send函数，_send函数中最后执行的_callTokensReceived就是先检查了这个合约是否作为接收者在register中注册，然后紧接着调用了tokensReceived方法
+    // 紧接着，在本次transfer调用结束之前也就是转账完成之前，会执行下面的操作提走所有的代币。
     function tokensReceived(
         address operator,
         address from,
@@ -77,3 +81,11 @@ contract MockERC777Attack is IERC777Recipient {
         selfdestruct(payable(msg.sender));
     }
 }
+
+/**
+ * ERC20和ERC777:
+ * 转账：ERC20的代币转账是通过transfer函数实现的，其中包括对授权和余额的检查并完成转账操作。
+ *      ERC777的代币转账是通过_send函数实现的，除了包含ERC20的基本功能和属性，还在转账同时触发合约中的回调函数等操作。
+ * 所以ERC777相比于ERC20是一个更为高级和灵活的代币标准，ERC777包含了ERC20的所有功能和方法，并增加了一些新功能和特性。
+ * 因此支持ERC20的应用和工具也可以支持ERC777，但需要作出相应修改和适配。
+ */
