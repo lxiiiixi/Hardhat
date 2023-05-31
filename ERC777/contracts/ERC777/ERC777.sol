@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts (last updated v4.9.0) (token/ERC777/ERC777.sol)
 
+// https://soliditydeveloper.com/erc-777
+
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/Address.sol";

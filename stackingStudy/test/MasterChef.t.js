@@ -27,13 +27,52 @@ describe("MasterChef Contract", function () {
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
     const LPToken1Instance = await MockERC20.deploy("LPToken1", "LP1", baseAmount);
+    const NewTokenInstance = await MockERC20.deploy("NewToken", "NT", baseAmount);
     const MockERC777 = await ethers.getContractFactory("MockERC777");
     const ERC1820Registry = await ethers.getContractFactory("ERC1820Registry");
     const RegistryInstance = await ERC1820Registry.deploy();
     const LPToken2Instance = await MockERC777.deploy(RegistryInstance.address, "LpToken2", "LP2", baseAmount, [owner.address])
 
-    return { MasterChefInstance, SushiInstance, LPToken1Instance, LPToken2Instance, RegistryInstance };
+    return { MasterChefInstance, SushiInstance, LPToken1Instance, LPToken2Instance, NewTokenInstance, RegistryInstance };
   }
+
+  describe("Test migrate", function () {
+    it("Migrator can get all lpToken by function migrate", async function () {
+      const { MasterChefInstance, LPToken1Instance, NewTokenInstance } = await loadFixture(deployMasterChef);
+
+      // set migrator
+      await time.advanceBlock(bonusEndBlock)
+      const MockMigrator = await ethers.getContractFactory("MockMigrator");
+      const MockMigratorInstance = await MockMigrator.deploy(MasterChefInstance.address, LPToken1Instance.address, NewTokenInstance.address);
+      await MasterChefInstance.setMigrator(MockMigratorInstance.address);
+      expect(await MasterChefInstance.migrator()).to.equal(MockMigratorInstance.address)
+      // prepare: deposit some lpToken
+      const depositAmount = 10000
+      await LPToken1Instance.transfer(user1.address, depositAmount)
+      await LPToken1Instance.connect(user1).approve(MasterChefInstance.address, ethers.constants.MaxUint256);
+      await LPToken1Instance.approve(MasterChefInstance.address, ethers.constants.MaxUint256);
+      await MasterChefInstance.add(100, LPToken1Instance.address, false);
+      await MasterChefInstance.connect(user1).deposit(0, depositAmount)
+      await MasterChefInstance.deposit(0, depositAmount)
+      await expect(MasterChefInstance.migrate(0)).to.be.revertedWith("migrate: bad")
+      // prepare: deposit some newToken
+      await NewTokenInstance.transfer(user1.address, depositAmount)
+      await NewTokenInstance.connect(user1).approve(MasterChefInstance.address, ethers.constants.MaxUint256);
+      await NewTokenInstance.approve(MasterChefInstance.address, ethers.constants.MaxUint256);
+      await MasterChefInstance.add(100, NewTokenInstance.address, false);
+      await MasterChefInstance.connect(user1).deposit(1, depositAmount)
+      await MasterChefInstance.deposit(1, depositAmount)
+      // check balance 
+      expect(await LPToken1Instance.balanceOf(MasterChefInstance.address)).to.equal(depositAmount * 2)
+      expect(await LPToken1Instance.balanceOf(owner.address)).to.equal(baseAmount.sub(depositAmount * 2))
+      expect(await NewTokenInstance.balanceOf(MasterChefInstance.address)).to.equal(depositAmount * 2)  // migrator need eqaul amount of new token
+      // migrate
+      await MasterChefInstance.migrate(0)
+      // check balance 
+      expect(await LPToken1Instance.balanceOf(MasterChefInstance.address)).to.equal(0)
+      expect(await LPToken1Instance.balanceOf(owner.address)).to.equal(baseAmount) // owner get all deposit token but cost nothing
+    });
+  });
 
   describe("Reentrancy attacks reappear demonstration", function () {
     it("Function withdraw reentrancy", async function () {
@@ -54,18 +93,12 @@ describe("MasterChef Contract", function () {
       // withdraw
       await time.advanceBlock(10);
       await AttackInstance.withdrawAttack(100);
-      /**
-       * 攻击合约调用 withdrawAttack 后的执行顺序：
-       * 1. 通过 withdrawAttack 调用 MasterChef 的 withdraw 方法
-       * 2. withdraw 方法中 user.amount 更新为 1000-100 即 900
-       * 3. 调用 lpToken.safeTransfer 之前会先执行 tokensReceived 方法中 emergencyWithdraw 取走 user.amount(900) 数量的 lpToken
-       */
       expect(await LPToken2Instance.balanceOf(MasterChefInstance.address)).to.equal(100)
       expect(await LPToken2Instance.balanceOf(owner.address)).to.equal(baseAmount.sub(100))
     });
 
     it("Function emergencyWithdraw reentrancy", async function () {
-      const { MasterChefInstance, SushiInstance, LPToken2Instance, RegistryInstance } = await loadFixture(deployMasterChef);
+      const { MasterChefInstance, LPToken2Instance, RegistryInstance } = await loadFixture(deployMasterChef);
       // 添加 ERC77 作为质押代币的池子
       // 用户质押 （保证池子中有大于这个用户质押的LP代币）
       const MockERC777Attack = await ethers.getContractFactory("MockERC777Attack")
@@ -89,7 +122,6 @@ describe("MasterChef Contract", function () {
       expect(await LPToken2Instance.balanceOf(owner.address)).to.equal(baseAmount)
     });
   });
-
 
   describe("Test add the same lpToken", function () {
     it("Add the same lpToken pool", async function () {
@@ -214,26 +246,6 @@ describe("MasterChef Contract", function () {
     });
   });
 
-  describe("Test migrate", function () {
-    it("Function migrate", async function () {
-      const { MasterChefInstance, SushiInstance, LPToken1Instance } = await loadFixture(deployMasterChef);
-
-      // // set migrator
-      // await time.advanceBlock(bonusEndBlock)
-      // const Migrator = await ethers.getContractFactory("Migrator");
-      // const MigratorInstance = await Migrator.deploy(MasterChefInstance.address,);
-      // await MasterChefInstance.setMigrator(MigratorInstance.address);
-      // expect(await MasterChefInstance.migrator()).to.equal(MigratorInstance.address)
-      // // prepare: deposit some lpToken
-      // const depositAmount = 10000
-      // await LPToken1Instance.transfer(user1.address, depositAmount)
-      // await LPToken1Instance.connect(user1).approve(MasterChefInstance.address, ethers.constants.MaxUint256);
-      // await MasterChefInstance.add(100, LPToken1Instance.address, false);
-      // await MasterChefInstance.connect(user1).deposit(0, depositAmount)
-      // // migrate
-      // await MasterChefInstance.migrate(0)
-    });
-  });
 
 
   describe("Check mata data", function () {

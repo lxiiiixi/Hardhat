@@ -6,7 +6,7 @@
 
 - 部署预言机合约，这里demo可以采用`SimplePriceOracle` 合约
 - 部署 COMP 代币，用来在用户操作时发奖励使用，直接将Comp代币转入相关合约
-- 部署Comptroller 与 Unitroller，注意修改Comptroller合约中Comp代币的地址，Unitroller实质上是代币合约，Comptroller实际上是实现合约。两者部署完成后要进行相互设置。
+- 部署Comptroller 与 Unitroller，注意修改Comptroller合约中Comp代币的地址，Unitroller实质上是代理合约，Comptroller实际上是实现合约。两者部署完成后要进行相互设置。
 - unitroller 设置预言机
 - 部署利息模块`WhitePaperInterestRateModel`
 - 部署市场合约（实现合约，`CErc20Delegate`）

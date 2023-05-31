@@ -171,7 +171,8 @@ contract MasterChef is Ownable {
         uint256 bal = lpToken.balanceOf(address(this));
         lpToken.safeApprove(address(migrator), bal);
         IERC20 newLpToken = migrator.migrate(lpToken);
-        require(bal == newLpToken.balanceOf(address(this)), "migrate: bad");
+        console.log(bal, newLpToken.balanceOf(address(this)));
+        require(bal == newLpToken.balanceOf(address(this)), "migrate: bad"); // 这里是为了确保migrate执行之后，当前合约收到了交换的代币
         pool.lpToken = newLpToken;
     }
 
