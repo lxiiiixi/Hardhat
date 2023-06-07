@@ -98,11 +98,11 @@ contract Swap is Ownable, ISwapForBorrow {
     event TokenListed(address indexed token, address liquidity);
     event Rebalance(address indexed token, uint256 osdAmount, uint256 lpAmount);
 
-    mapping(address => Pool) public pools; // 地址 - Pool
-    address[] public poolTokenList; // 池子token列表
-    Osd public osd; // osd 代币
-    IBorrowForSwap public $borrow; //
-    address public priceFeed; // 价格源
+    mapping(address => Pool) public pools;
+    address[] public poolTokenList;
+    Osd public osd;
+    IBorrowForSwap public $borrow;
+    address public priceFeed;
 
     uint256 public constant OSD_PRICE = 1e8;
 
@@ -131,7 +131,7 @@ contract Swap is Ownable, ISwapForBorrow {
 
         poolTokenList.push(token);
         pool.token = IERC20(token);
-        pool.liquidity = new Liquidity(token); // 基于 token 创建一个新的 Liquidity 合约实例
+        pool.liquidity = new Liquidity(token);
         // solhint-disable-next-line not-rely-on-time
         pool.createdAt = block.timestamp;
 
@@ -177,10 +177,9 @@ contract Swap is Ownable, ISwapForBorrow {
         require(address(pool.token) != address(0), "POOL_NOT_EXISTS");
 
         uint256 liquidity = _liquidityOut(pool, amount);
-        // 本方法的重点在于这里的计算：传入的资产数量计算出数据更新之前池子对应的流动性份额数量
 
         uint256 newReserve = pool.reserve += amount;
-        $borrow.updateInterest(token, newReserve); // 更新记录的利息信息
+        $borrow.updateInterest(token, newReserve);
 
         emit PoolAmountUpdated(
             address(pool.token),
@@ -207,7 +206,6 @@ contract Swap is Ownable, ISwapForBorrow {
         require(address(pool.token) != address(0), "POOL_NOT_EXISTS");
 
         (uint256 amount, uint256 amountOsd) = _liquidityIn(pool, liquidity);
-        // 根据池子信息和希望移除的流动性数量计算出对应的token数量和osd数量
 
         require(pool.reserve > amount, "INSUFF_RESERVE");
         uint256 newReserve = pool.reserve -= amount;
@@ -258,11 +256,9 @@ contract Swap is Ownable, ISwapForBorrow {
             return 0;
         }
         price = IOracle(priceFeed).getPrice(token);
-        console.log("_getTokenPrice by oracle:", price);
         require(price > 0, "PRICE_ZERO");
     }
 
-    // 计算从流动性池pool中取出指定amount数量的资产所对应的流动性份额数量
     function _liquidityOut(
         Pool storage pool,
         uint256 amount
@@ -273,24 +269,18 @@ contract Swap is Ownable, ISwapForBorrow {
             (uint256 reserve, ) = _getReserve(pool);
             uint256 tokenPrice = _getTokenPrice(address(pool.token));
             netValue = reserve + (pool.osd * OSD_PRICE) / tokenPrice;
-            // 如果使用预言机，代币净值为： 池中代币的储备量 + 以池子代币价格为度量单位的该池子osd总价值
         } else {
             (uint256 reserve, uint256 reserveOsd) = _getReserve(pool);
             netValue = reserve + (reserve * pool.osd) / reserveOsd;
-            // 如果不使用预言机，代币净值为： 池中代币的储备量 + osd储备量按照储备比例转换为相同代币后相加得到
         }
 
-        // 对于这里净值的理解：其实就是整个池子中token和osd的总价值，将osd转换为以当前代币相同的单位价值来衡量的价值量
-
         liquidity = ((pool.liquidity.totalSupply() * valueIn) / netValue);
-        // liquidity = 总流动性 * 用户要取出的流动性数量 / 流动池中的所有资产总量
-        console.log("_liquidityOut liquidity:", liquidity);
     }
 
     function _rebalanceLiquidityOut(
         Pool storage pool,
-        uint256 amount, // 要交换的代币数量
-        uint256 amountOsd, // 交换获得的osd代币数量
+        uint256 amount,
+        uint256 amountOsd,
         uint256 debt
     ) internal view returns (uint256 liquidity) {
         uint256 netValue;
@@ -298,9 +288,6 @@ contract Swap is Ownable, ISwapForBorrow {
 
         (uint256 reserve, ) = _getReserve(pool);
         netValue = (reserve * amountOsd) / amount + pool.osd;
-        // 交易前的osd代币的净值 = 前池中的储备量 * amountOsd的比例 + 交易前池中记录的osd余额
-
-        // 计算需要发行的新流动性代币数量
         liquidity =
             (pool.liquidity.totalSupply() * valueIn) /
             (netValue - valueIn);
@@ -311,9 +298,8 @@ contract Swap is Ownable, ISwapForBorrow {
         uint256 liquidity
     ) internal view returns (uint256 amount, uint256 amountOsd) {
         (uint256 reserve, ) = _getReserve(pool);
-        amount = (reserve * liquidity) / pool.liquidity.totalSupply(); // 整个池子的资产储备量reserve * 即将注入的流动性在整个池子流动性的占比
-        amountOsd = (pool.osd * liquidity) / pool.liquidity.totalSupply(); // 使用同样的比例计算出的，注入liquidity数量的流动性对应的osd数量
-        console.log("_liquidityIn:", amount, amountOsd);
+        amount = (reserve * liquidity) / pool.liquidity.totalSupply();
+        amountOsd = (pool.osd * liquidity) / pool.liquidity.totalSupply();
     }
 
     function _getReserve(
@@ -322,10 +308,9 @@ contract Swap is Ownable, ISwapForBorrow {
         (uint256 newDebt, uint256 totalProtocolRevenue, ) = $borrow.getDebt(
             address(pool.token)
         );
+
         uint256 reserve = pool.reserve + newDebt - totalProtocolRevenue;
-        uint256 value = (reserve * pool.lastRatioOsd) / pool.lastRatioToken; // 小问题：没有除零检查
-        console.log("_getReserve", reserve, value);
-        // 这里返回的分别都是对于这个池子来说代币和osd的储备量，其中osd是根据池子代币储备量和上一次osd和池子代币的比例计算出来的，也就是说这个比例是保持不变的
+        uint256 value = (reserve * pool.lastRatioOsd) / pool.lastRatioToken;
         return (reserve, value);
     }
 
@@ -358,51 +343,31 @@ contract Swap is Ownable, ISwapForBorrow {
         internal
         view
         returns (
-            uint256 valueOut, // amountIn 数量的代币对应可以得到的osd输出数量
-            uint256 newReserve, // 池子中的新储备（reserve + amountIn）
-            uint256 newValue, // 池子中osd的新储备量（如果不是osd则返回0）
-            uint256 fee, // 这次交易的过程中会产生的费用
-            uint256 debt //
+            uint256 valueOut,
+            uint256 newReserve,
+            uint256 newValue,
+            uint256 fee,
+            uint256 debt
         )
     {
-        // 1. 计算池子当前的token和osd储备
         (uint256 reserve, uint256 reserveOsd) = _getReserve(pool);
         address token = address(pool.token);
-        // 2. 计算得到在当前池子中两个代币储备量和代币价格基础上，amountIn数量的代币对应的输出代币数量
         uint256 valueOut0 = Curve.getValueOut(
             reserve,
             reserveOsd,
             pool.usePriceFeed,
-            _getTokenPrice(token), // 池子中 token 价格
+            _getTokenPrice(token),
             amountIn
         );
-        // valueOut0： 输入代币对应的输出代币数量 （到底是代币数量还是价值，这里是以什么标准来定价值的）
-        // 如果使用预言机价格： valueOut0 = _getTokenPrice(token) * 1e8 / amountIn （目前测试都是会使用预言机的情况）
-        // 如果不使用预言机（也就是token和osd的计算）： valueOut0 = reserveOsd - (reserve * reserveOsd) / (reserve + debt)(减去的这个部分如果计算得到的值等于0则赋值为1)
 
-        console.log("_getValueOut valueOut0 by curve:", valueOut0); // 100
-
-        // 3. 根据输出量计算出这次交易的费率，计算可以输出
         uint256 feeRate = pool.feeRates[feeType];
-        fee = (valueOut0 * feeRate) / 100000; // valueOut0 * 300 / 100000 才能大于1然后产生费用
+        fee = (valueOut0 * feeRate) / 100000;
         valueOut = valueOut0 - fee;
-
-        console.log("_getValueOut get fee:", fee, feeRate);
 
         newReserve = reserve + amountIn;
         if (!pool.usePriceFeed) {
             newValue = reserveOsd - valueOut0;
         }
-
-        // newValue就是新的osd储备的值，如果不使用预言机，说明这针对的输出代币是osd，新的osd储备就要减去对应输入即将输出的osd代币（储备需要减少），否则这个值直接返回0
-        // newValue = 池子中osd储备 - amountIn数量的token输入需要osd输出的量
-        console.log("_getValueOut newValue valueOut:", newValue, valueOut);
-        console.log(
-            "_getValueOut will get debt:",
-            newReserve,
-            newValue,
-            valueOut0
-        );
 
         // todo overflow revert
         debt = _getDebt(pool, newReserve, newValue, valueOut0);
@@ -428,7 +393,6 @@ contract Swap is Ownable, ISwapForBorrow {
 
         (uint256 reserve, uint256 reserveValue) = _getReserve(pool);
         address token = address(pool.token);
-        console.log(reserve, reserveValue, valueIn1, "0000000");
         amountOut = Curve.getAmountOut(
             reserve,
             reserveValue,
@@ -436,11 +400,6 @@ contract Swap is Ownable, ISwapForBorrow {
             _getTokenPrice(token),
             valueIn1
         );
-        // 计算token需要输出的数量
-        // 如果使用预言机： 首先需要保证token价格大于0， amountOut = valueIn1 * 1e8 / _getTokenPrice(token)
-        // 如果不使用预言机： out = (reserveValue * reserve) / (reserveValue + valueIn1)
-        //                 amountOut =  reserve - out (如果out等于0，则赋值为0)
-        console.log("_getAmountOut: amountOut by Curve", amountOut);
         require(reserve > amountOut, "INSUFF_TOKEN");
         newReserve = reserve - amountOut;
         newValue = reserveValue + valueIn;
@@ -527,13 +486,13 @@ contract Swap is Ownable, ISwapForBorrow {
 
     // core swap
     function _swapOsd(
-        Pool storage pool, // 池子
-        uint256 amount, // swap token的输入数量
-        uint256 newReserve, // token的新增储备
-        uint256 newValue, // 新的osd值
-        uint256 amountOsd, // 要swap的osd数量
-        uint256 fee, // swap过程中产生的费用（osd）
-        uint256 debt // awap过程中产生的债务
+        Pool storage pool,
+        uint256 amount,
+        uint256 newReserve,
+        uint256 newValue,
+        uint256 amountOsd,
+        uint256 fee,
+        uint256 debt
     ) internal {
         pool.reserve += amount;
         $borrow.updateInterest(address(pool.token), pool.reserve);
@@ -574,7 +533,6 @@ contract Swap is Ownable, ISwapForBorrow {
             amountOsd,
             OrderType.SELL
         );
-        console.log("_swapOsd transfer token", amount);
 
         pool.token.safeTransferFrom(msg.sender, address(this), amount);
     }
@@ -636,15 +594,7 @@ contract Swap is Ownable, ISwapForBorrow {
                 uint256 fee,
                 uint256 debt
             ) = _getValueOut(poolIn, poolOut.feeType, amountIn);
-            // 疑问：为什么这里是根据 poolOut.feeType 来计算费率
-            amountOsd = valueOut; // 计算得到的输出代币价值对应的osd数量
-
-            console.log(
-                "swapInPart1:(not osd)",
-                amountOsd,
-                newReserve,
-                newValue
-            );
+            amountOsd = valueOut;
 
             _swapOsd(
                 poolIn,
@@ -679,9 +629,6 @@ contract Swap is Ownable, ISwapForBorrow {
             ) = _getAmountOut(poolOut, poolIn.feeType, amountOsd);
 
             amountOut = _amountOut;
-
-            console.log("swapInPart2:(not osd) amountOut:", amountOut);
-
             address _to = to; // avoid stack too deep
             _swapToken(
                 poolOut,
@@ -697,11 +644,11 @@ contract Swap is Ownable, ISwapForBorrow {
     }
 
     function swapIn(
-        address tokenIn, // 用户的输入代币
-        address tokenOut, // 用户想要换出的输出代币
-        uint256 amountIn, // 输入数量
-        uint256 amountOutMin, // 最小输出数量
-        address to, // 将输出代币发送的目标地址
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address to,
         uint256 deadline
     ) external expires(deadline) returns (uint256) {
         require(tokenIn != tokenOut, "SAME_TOKEN");
@@ -718,12 +665,6 @@ contract Swap is Ownable, ISwapForBorrow {
             amountOsd
         );
         emit Swapped(msg.sender, tokenIn, tokenOut, amountIn, amountOut, to);
-        console.log(
-            "swapIn: amountOut amountOutMin",
-            amountOsd,
-            amountOut,
-            amountOutMin
-        );
         require(amountOut >= amountOutMin, "INSUFF_OUTPUT");
         return amountOut;
     }
@@ -747,9 +688,6 @@ contract Swap is Ownable, ISwapForBorrow {
                 uint256 fee
             ) = _getValueIn(poolOut, poolIn.feeType, amountOut);
             amountOsd = _amountOsd;
-
-            console.log("swapOutPart1 - amountOsd", amountOsd);
-
             _swapToken(
                 poolOut,
                 amountOut,
@@ -783,9 +721,6 @@ contract Swap is Ownable, ISwapForBorrow {
                 uint256 debt
             ) = _getAmountIn(poolIn, poolOut.feeType, amountOsd);
             amountIn = _amountIn;
-
-            console.log("swapOutPart2 - amountIn", amountIn);
-
             _swapOsd(
                 poolIn,
                 amountIn,
@@ -826,7 +761,6 @@ contract Swap is Ownable, ISwapForBorrow {
             to,
             amountOsd
         );
-        console.log("swapOut - amountIn", amountIn);
         require(amountIn <= amountInMax, "EXCESSIVE_INPUT");
 
         emit Swapped(msg.sender, tokenIn, tokenOut, amountIn, amountOut, to);
