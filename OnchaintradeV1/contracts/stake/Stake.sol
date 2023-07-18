@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "hardhat/console.sol";
+
 contract Stake is Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -135,12 +137,28 @@ contract Stake is Ownable {
         // 更新池子
         PoolInfo storage pool = pools[_lpToken];
         // solhint-disable-next-line not-rely-on-time
+        // console.log(block.timestamp, pool.endTime);
         uint256 lastTime = block.timestamp < pool.endTime
             ? block.timestamp
             : pool.endTime;
+        // console.log(lastTime,pool.lastRewardTime,lastTime <= pool.lastRewardTime);
+
         if (lastTime <= pool.lastRewardTime) {
             return;
         }
+        /**
+         * 仔细分析一下这里的时间：假如本次更新池子时的时间值分别如下
+         * - 上次记录的 pool.lastRewardTime => 1000
+         * - 结束时间为 pool.endTime        => 1500
+         * - 当前更新的时间  block.timestamp => 2000
+         * - 最新时间 lastTime 总是取得当前时间和结束时间中较小的  =>  1500
+         * 那么本次更新上面会比较 1500 <= 1000  =>  不满足条件，不会return会继续执行下面的更新（超过了奖励发放的时间区间，不需要更新奖励信息了）
+         *       block.timestamp <= pool.lastRewardTime 的比较是保证在同一个时间不会更新两次
+         *       pool.endTime <= pool.lastRewardTime 的比较是保证如果超过了endTime就不需要更新
+         * lastTime为endTime也就是 lastTime=1500 的情况紧接着往下：
+         * - 如果 lpSupply!==0: pool.lastRewardTime = 1500  =>  本次更新依然会执行，计算从上次更新到池子的endTime时间内的奖励，但是之后每次更新上面的判断(1500<=1500)都会直接return不会更新下面的内容了
+         * - 如果 lpSupply ==0: pool.lastRewardTime = 2000  =>  也就是当前池子中没有人质押，也就不需要计算和记录奖励数据了，但是依然记录这次的更新，只是中间这一段没有人质押的时间不会记录奖励
+         */
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (lpSupply == 0) {
             // solhint-disable-next-line not-rely-on-time
@@ -148,8 +166,10 @@ contract Stake is Ownable {
             return;
         } else {
             uint256 duration = lastTime.sub(pool.lastRewardTime);
+            console.log("updatePool ++++reward, time duration:", duration);
             uint256 reward = duration.mul(pool.rewardPerSecond);
             // update perShare
+            // 对于 accERC20PerShare 是累加的理解： 因为reward只是根据某一个时间区间算出的局部奖励，想象如果分母lpSupply不变，但是我每一段时间更新池子都只是计算这一段时间内的奖励，奖励是根据累加的那么对奖励的分发的这个值自然也是累加，但是如果某一个时区内lpSupply增加，那么相比于lpSupply较少的情况下每份质押代币分到的奖励自然也是会比较小的，所以按照比例累加是可以理解的
             pool.accERC20PerShare = pool.accERC20PerShare.add(
                 reward.mul(1e12).div(lpSupply)
             );
@@ -233,6 +253,7 @@ contract Stake is Ownable {
         updatePool(_lpToken);
         if (user.amount > 0) {
             // transfer reward
+            // 结算之前质押代币的奖励，pool.accERC20PerShare 使用截止到现在最新的
             uint256 pendingAmount = user
                 .amount
                 .mul(pool.accERC20PerShare)
@@ -248,6 +269,7 @@ contract Stake is Ownable {
         );
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accERC20PerShare).div(1e12);
+        // 对于 user.rewardDebt 的理解： 记录截止到当前时间，用户之前质押的代币按照此时最新的pool.accERC20PerShare产生的奖励，其实可以理解为也就是已经结算过的奖励，下次计算时就减去这个值，得到用户根据user.amount的数量距离上一次提取奖励时区内的累积奖励，这也对应了为什么pool.accERC20PerShare是累积的
         userOpTimeline[_lpToken][msg.sender].push(
             UserOp(EnumUserOp.ADD, _amount, _now())
         );

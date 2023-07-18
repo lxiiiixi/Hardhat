@@ -32,43 +32,43 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
 
     // pair struct
     struct Pair {
-        address collateralToken;    // collaToken
+        address collateralToken; // collaToken
         address indexToken; // longed/shorted token
-        PairStatus status;  // pair status
+        PairStatus status; // pair status
         uint256 unlistCollateralPrice;
         uint256 unlistIndexPrice;
     }
 
     // config
-    address public protocolFeeTo;   // protocolFeeAddress
+    address public protocolFeeTo; // protocolFeeAddress
     address public futurePriceFeed; // Price Feed contract
-    address public futureUtil;  // util contract
+    address public futureUtil; // util contract
 
-    mapping(bytes32 => Pair) public pairs;  // pair
-    mapping(bytes32 => uint256) public override tradingFeeRates;    // pair -> tradingFeeRate
+    mapping(bytes32 => Pair) public pairs; // pair
+    mapping(bytes32 => uint256) public override tradingFeeRates; // pair -> tradingFeeRate
     mapping(bytes32 => uint256) public override maxMaintanenceMarginRatios; // pair -> maxMMR
     mapping(bytes32 => uint256) public override minMaintanenceMarginRatios; // pair -> minMMR
     mapping(bytes32 => uint256) public override maxPositionUsdWithMaxLeverages; // pair -> max position size with max leverage
-    mapping(bytes32 => uint256) public override maxLeverages;   // pair -> max leverage
-    mapping(bytes32 => uint256) public override maxTotalLongSizes;  // pair -> maxTotalLongOI
+    mapping(bytes32 => uint256) public override maxLeverages; // pair -> max leverage
+    mapping(bytes32 => uint256) public override maxTotalLongSizes; // pair -> maxTotalLongOI
     mapping(bytes32 => uint256) public override maxTotalShortSizes; // pair -> maxTotalShortOI
 
-    mapping(address => uint8) public override tokenDecimals;    // token -> decimal
-    mapping(address => uint256) public tokenBalances;   // token ->balance
-    mapping(bytes32 => int256) public override cumulativeLongFundingRates;  // pair -> cLFR
+    mapping(address => uint8) public override tokenDecimals; // token -> decimal
+    mapping(address => uint256) public tokenBalances; // token ->balance
+    mapping(bytes32 => int256) public override cumulativeLongFundingRates; // pair -> cLFR
     mapping(bytes32 => int256) public override cumulativeShortFundingRates; // pair -> cSFR
-    mapping(bytes32 => int256) public override longFundingRates;    // pair -> most recent hourly lFR
-    mapping(bytes32 => int256) public override shortFundingRates;   // pair -> most recent hourly sFR
-    mapping(bytes32 => uint256) public override lastFundingTimestamps;  // pair -> last funding settlement time
-    mapping(address => uint256) public override collateralInsuranceFunds;   // collToken -> balance
+    mapping(bytes32 => int256) public override longFundingRates; // pair -> most recent hourly lFR
+    mapping(bytes32 => int256) public override shortFundingRates; // pair -> most recent hourly sFR
+    mapping(bytes32 => uint256) public override lastFundingTimestamps; // pair -> last funding settlement time
+    mapping(address => uint256) public override collateralInsuranceFunds; // collToken -> balance
     mapping(bytes32 => uint256) public override protocolUnrealizedFees; // pair -> revenue balance
     mapping(bytes32 => uint256) public override totalLongSizes; // pair -> total Long OI(token)
     mapping(bytes32 => uint256) public override totalShortSizes; // pair -> total short OI(token)
     mapping(bytes32 => uint256) public override totalLongOpenNotionals; //pair -> totalLongOI($)
-    mapping(bytes32 => uint256) public override totalShortOpenNotionals;    //pair -> totalShortOI($)
-    mapping(bytes32 => Position) public positions;  // posKey -> position
+    mapping(bytes32 => uint256) public override totalShortOpenNotionals; //pair -> totalShortOI($)
+    mapping(bytes32 => Position) public positions; // posKey -> position
     mapping(address => mapping(address => bool)) public userRouters; // user defined router
-    mapping(address => bool) public systemRouters;  // system router address
+    mapping(address => bool) public systemRouters; // system router address
 
     event UpdateMaxTotalSize(
         bytes32 indexed pairKey,
@@ -243,7 +243,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     }
 
     // 上架交易对
-    function listPair(address _collateralToken, address _indexToken) external onlyOwner {
+    function listPair(
+        address _collateralToken,
+        address _indexToken
+    ) external onlyOwner {
         require(_collateralToken != address(0), "invalid_collateral");
         bytes32 pairKey = getPairKey(_collateralToken, _indexToken);
 
@@ -251,7 +254,8 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
 
         require(pair.status == PairStatus.unlist, "pair_listed");
 
-        tokenDecimals[_collateralToken] = DecimalERC20(_collateralToken).decimals();
+        tokenDecimals[_collateralToken] = DecimalERC20(_collateralToken)
+            .decimals();
 
         // to support virtual tokens: doge/usdc, sol/usdc, create a ERC20 indexToken and support it's price feed
         if (_indexToken != address(0)) {
@@ -266,7 +270,6 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
 
         emit ListPair(pairKey, _collateralToken, _indexToken);
     }
-
 
     // 设置交易对最大总仓位大小
     function setMaxTotalSize(
@@ -320,17 +323,40 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         bool _isLong
     ) external override nonReentrant {
         _validateRouter(_account);
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
 
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         require(pos.openNotional > 0, "position_not_exist");
 
         uint256 _marginDelta = _transferIn(_collateralToken);
         pos.margin = pos.margin + _marginDelta;
 
-        emit IncreaseMargin(posKey, _collateralToken, _indexToken, _account, _isLong, _marginDelta);
+        emit IncreaseMargin(
+            posKey,
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            _marginDelta
+        );
         emit UpdatePosition(
             posKey,
             _collateralToken,
@@ -342,7 +368,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             pos.size,
             pos.entryFundingRate
         );
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
     }
 
     // user remove margin from position, not currently used by front end
@@ -356,10 +388,26 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) external nonReentrant {
         _validateRouter(_account);
         require(_account == _receiver, "Invalid caller");
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
 
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         _validatePositionExist(pos);
         require(pos.margin > _marginDelta, "margin_delta_exceed");
@@ -387,7 +435,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         );
 
         // todo replace by validatePosition, validate max usd per position
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
     }
 
     // user decrease margin from position
@@ -401,12 +455,28 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) external override nonReentrant {
         _validateRouter(_account);
         require(_account == _receiver, "Invalid caller");
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
 
         _updateFundingFeeRate(_collateralToken, _indexToken, _isLong, 0, 0);
 
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         _validatePositionExist(pos);
         (int256 fundingFee, , int256 pnl, , ) = _calcNewPosition(
@@ -423,8 +493,14 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         require(leftMargin > _marginDelta, "margin_delta_exceed");
 
         pos.margin = leftMargin - _marginDelta;
-        pos.openNotional = uint256(token1ToToken2(_indexToken, int256(pos.size), _collateralToken));
-        pos.entryFundingRate = getCumulativeFundingRate(_collateralToken, _indexToken, _isLong);
+        pos.openNotional = uint256(
+            token1ToToken2(_indexToken, int256(pos.size), _collateralToken)
+        );
+        pos.entryFundingRate = getCumulativeFundingRate(
+            _collateralToken,
+            _indexToken,
+            _isLong
+        );
         pos.entryCollateralPrice = getPrice(_collateralToken);
         pos.entryIndexPrice = getPrice(_indexToken);
 
@@ -462,7 +538,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         );
 
         // todo replace by validatePosition, validate max usd per position
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
     }
 
     // open new or increase an already existing position
@@ -474,21 +556,43 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         uint256 _notionalDelta
     ) public override nonReentrant {
         _validateRouter(_account);
-        require(getPairStatus(_collateralToken, _indexToken) == PairStatus.list, "pair_unlist");
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        require(
+            getPairStatus(_collateralToken, _indexToken) == PairStatus.list,
+            "pair_unlist"
+        );
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
 
         _updateFundingFeeRate(
             _collateralToken,
             _indexToken,
             _isLong,
             int256(_notionalDelta),
-            token1ToToken2(_collateralToken, int256(_notionalDelta), _indexToken)
+            token1ToToken2(
+                _collateralToken,
+                int256(_notionalDelta),
+                _indexToken
+            )
         );
 
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         uint256 marginDelta = _transferIn(_collateralToken);
         uint256 sizeDelta = uint256(
-            token1ToToken2(_collateralToken, int256(_notionalDelta), _indexToken)
+            token1ToToken2(
+                _collateralToken,
+                int256(_notionalDelta),
+                _indexToken
+            )
         );
 
         (int256 fundingFee, uint256 tradingFee, , , ) = _calcNewPosition(
@@ -502,8 +606,18 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         );
 
         {
-            _increaseTotalSize(_collateralToken, _indexToken, _isLong, sizeDelta);
-            _increaseTotalOpenNotional(_collateralToken, _indexToken, _isLong, _notionalDelta);
+            _increaseTotalSize(
+                _collateralToken,
+                _indexToken,
+                _isLong,
+                sizeDelta
+            );
+            _increaseTotalOpenNotional(
+                _collateralToken,
+                _indexToken,
+                _isLong,
+                _notionalDelta
+            );
 
             int256 remainMargin = int256(pos.margin) +
                 int256(marginDelta) -
@@ -514,7 +628,11 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             pos.margin = uint256(remainMargin);
             pos.openNotional = pos.openNotional + _notionalDelta;
             pos.size = pos.size + sizeDelta;
-            pos.entryFundingRate = getCumulativeFundingRate(_collateralToken, _indexToken, _isLong);
+            pos.entryFundingRate = getCumulativeFundingRate(
+                _collateralToken,
+                _indexToken,
+                _isLong
+            );
             pos.entryCollateralPrice = getPrice(_collateralToken);
             pos.entryIndexPrice = getPrice(_indexToken);
         }
@@ -541,7 +659,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             0,
             address(0)
         );
-        validatePosition(_collateralToken, _indexToken, _account, _isLong, true);
+        validatePosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
         _validateMaxTotalSize(_collateralToken, _indexToken, _isLong);
     }
 
@@ -558,7 +682,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         int256 fundingFee,
         int256 pnl
     ) private {
-        bytes32 posKey = getPositionKey(collateralToken, indexToken, account, isLong);
+        bytes32 posKey = getPositionKey(
+            collateralToken,
+            indexToken,
+            account,
+            isLong
+        );
         uint256 indexPrice = getPrice(indexToken);
         uint256 collateralPrice = getPrice(collateralToken);
         emit ClosePosition(
@@ -576,7 +705,17 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             collateralPrice,
             indexPrice
         );
-        emit UpdatePosition(posKey, collateralToken, indexToken, account, isLong, 0, 0, 0, 0);
+        emit UpdatePosition(
+            posKey,
+            collateralToken,
+            indexToken,
+            account,
+            isLong,
+            0,
+            0,
+            0,
+            0
+        );
     }
 
     // emit increase position event
@@ -591,7 +730,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         uint256 tradingFee,
         int256 fundingFee
     ) private {
-        bytes32 posKey = getPositionKey(collateralToken, indexToken, account, isLong);
+        bytes32 posKey = getPositionKey(
+            collateralToken,
+            indexToken,
+            account,
+            isLong
+        );
         uint256 indexPrice = getPrice(indexToken);
         uint256 collateralPrice = getPrice(collateralToken);
         {
@@ -637,7 +781,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         int256 fundingFee,
         int256 pnl
     ) private {
-        bytes32 posKey = getPositionKey(collateralToken, indexToken, account, isLong);
+        bytes32 posKey = getPositionKey(
+            collateralToken,
+            indexToken,
+            account,
+            isLong
+        );
         uint256 indexPrice = getPrice(indexToken);
         uint256 collateralPrice = getPrice(collateralToken);
 
@@ -682,10 +831,24 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) public override nonReentrant returns (uint256) {
         _validateRouter(_account);
         require(_account == _receiver, "Invalid caller");
-        require(getPairStatus(_collateralToken, _indexToken) == PairStatus.list, "pair_unlist");
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
+        require(
+            getPairStatus(_collateralToken, _indexToken) == PairStatus.list,
+            "pair_unlist"
+        );
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
 
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         require(pos.openNotional > 0, "position_not_exist");
 
@@ -699,7 +862,14 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
 
         require(pos.openNotional >= _notionalDelta, "decrease_size_exceed");
         if (pos.openNotional == _notionalDelta) {
-            return _closePosition(_collateralToken, _indexToken, _account, _isLong, _receiver);
+            return
+                _closePosition(
+                    _collateralToken,
+                    _indexToken,
+                    _account,
+                    _isLong,
+                    _receiver
+                );
         } else {
             return
                 _decreasePosition(
@@ -725,9 +895,23 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) public override nonReentrant returns (uint256) {
         _validateRouter(_account);
         // require(_account == _receiver, "Invalid caller");
-        require(getPairStatus(_collateralToken, _indexToken) == PairStatus.list, "pair_unlist");
-        validateLiquidate(_collateralToken, _indexToken, _account, _isLong, true);
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        require(
+            getPairStatus(_collateralToken, _indexToken) == PairStatus.list,
+            "pair_unlist"
+        );
+        validateLiquidate(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong,
+            true
+        );
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         require(pos.openNotional > 0, "position_not_exist");
         _updateFundingFeeRate(
@@ -740,20 +924,37 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         require(pos.openNotional >= _notionalDelta, "decrease_size_exceed");
 
         if (pos.openNotional == _notionalDelta) {
-            return _closePosition(_collateralToken, _indexToken, _account, _isLong, _receiver);
+            return
+                _closePosition(
+                    _collateralToken,
+                    _indexToken,
+                    _account,
+                    _isLong,
+                    _receiver
+                );
         } else {
-            (int256 fundingFee, uint256 tradingFee, int256 pnl, , ) = _calcNewPosition(
-                _collateralToken,
-                _indexToken,
-                _account,
-                _isLong,
-                _notionalDelta,
-                _notionalDelta * pos.size / pos.openNotional,
-                false
-            );
+            (
+                int256 fundingFee,
+                uint256 tradingFee,
+                int256 pnl,
+                ,
+
+            ) = _calcNewPosition(
+                    _collateralToken,
+                    _indexToken,
+                    _account,
+                    _isLong,
+                    _notionalDelta,
+                    (_notionalDelta * pos.size) / pos.openNotional,
+                    false
+                );
             pnl = ((pnl * int256(_notionalDelta)) / int256(pos.openNotional));
-            int256 leftMargin = int256(pos.margin) + pnl - fundingFee - int256(tradingFee);
-            uint256 _marginDelta = (uint256(leftMargin) * _notionalDelta) / pos.openNotional;
+            int256 leftMargin = int256(pos.margin) +
+                pnl -
+                fundingFee -
+                int256(tradingFee);
+            uint256 _marginDelta = (uint256(leftMargin) * _notionalDelta) /
+                pos.openNotional;
             return
                 _decreasePosition(
                     _collateralToken,
@@ -775,7 +976,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         bool _isLong,
         address _receiver
     ) private returns (uint256) {
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         (
             int256 fundingFee,
             uint256 tradingFee,
@@ -792,7 +998,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
                 false
             );
         _decreaseTotalSize(_collateralToken, _indexToken, _isLong, pos.size);
-        _decreaseTotalOpenNotional(_collateralToken, _indexToken, _isLong, pos.openNotional);
+        _decreaseTotalOpenNotional(
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            pos.openNotional
+        );
         require(remainMargin > 0, "should_liquidate");
         emitClosePositionEvent(
             _collateralToken,
@@ -807,7 +1018,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             pnl
         );
         {
-            bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+            bytes32 posKey = getPositionKey(
+                _collateralToken,
+                _indexToken,
+                _account,
+                _isLong
+            );
             delete positions[posKey];
         }
 
@@ -859,17 +1075,28 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _receiver
     ) private returns (uint256) {
         // require(_account == _receiver, "Invalid caller");
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
-
-        (int256 fundingFee, uint256 tradingFee, int256 pnl, , ) = _calcNewPosition(
+        Position storage pos = _getPosition(
             _collateralToken,
             _indexToken,
             _account,
-            _isLong,
-            _notionalDelta,
-            pos.size * _notionalDelta / pos.openNotional,
-            false
+            _isLong
         );
+
+        (
+            int256 fundingFee,
+            uint256 tradingFee,
+            int256 pnl,
+            ,
+
+        ) = _calcNewPosition(
+                _collateralToken,
+                _indexToken,
+                _account,
+                _isLong,
+                _notionalDelta,
+                (pos.size * _notionalDelta) / pos.openNotional,
+                false
+            );
 
         pnl = (pnl * int256(_notionalDelta)) / int256(pos.openNotional);
 
@@ -892,12 +1119,21 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         require(remainMargin > 0, "insuff_margin");
         uint256 sizeDelta = ((_notionalDelta) * pos.size) / pos.openNotional;
 
-        _decreaseTotalOpenNotional(_collateralToken, _indexToken, _isLong, _notionalDelta);
+        _decreaseTotalOpenNotional(
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            _notionalDelta
+        );
         _decreaseTotalSize(_collateralToken, _indexToken, _isLong, sizeDelta);
         pos.margin = uint256(remainMargin);
         pos.size = pos.size - sizeDelta;
         pos.openNotional = pos.openNotional - _notionalDelta;
-        pos.entryFundingRate = getCumulativeFundingRate(_collateralToken, _indexToken, _isLong);
+        pos.entryFundingRate = getCumulativeFundingRate(
+            _collateralToken,
+            _indexToken,
+            _isLong
+        );
 
         emitDecreasePositionEvent(
             _collateralToken,
@@ -922,7 +1158,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _account,
         bool _isLong
     ) public override nonReentrant {
-        Position storage pos = _getPosition(_collateralToken, _indexToken, _account, _isLong);
+        Position storage pos = _getPosition(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
         require(pos.openNotional > 0, "position_not_exist");
 
@@ -983,8 +1224,18 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             address(0)
         );
         _decreaseTotalSize(_collateralToken, _indexToken, _isLong, pos.size);
-        _decreaseTotalOpenNotional(_collateralToken, _indexToken, _isLong, pos.openNotional);
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        _decreaseTotalOpenNotional(
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            pos.openNotional
+        );
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         delete positions[posKey];
     }
 
@@ -1001,7 +1252,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         int256 fundingFee,
         int256 pnl
     ) private {
-        bytes32 posKey = getPositionKey(collateralToken, indexToken, account, isLong);
+        bytes32 posKey = getPositionKey(
+            collateralToken,
+            indexToken,
+            account,
+            isLong
+        );
         uint256 indexPrice = getPrice(indexToken);
         uint256 collateralPrice = getPrice(collateralToken);
         emit LiquidatePosition(
@@ -1019,7 +1275,17 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             collateralPrice,
             indexPrice
         );
-        emit UpdatePosition(posKey, collateralToken, indexToken, account, isLong, 0, 0, 0, 0);
+        emit UpdatePosition(
+            posKey,
+            collateralToken,
+            indexToken,
+            account,
+            isLong,
+            0,
+            0,
+            0,
+            0
+        );
     }
 
     function validatePosition(
@@ -1029,7 +1295,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         bool _isLong,
         bool _raise
     ) public view returns (bool isRevert) {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
         if (pos.size == 0) {
@@ -1051,12 +1322,20 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
                 revert("insuff_margin");
             }
         }
-        uint256 maxLeverage = maxLeverages[getPairKey(_collateralToken, _indexToken)];
+        uint256 maxLeverage = maxLeverages[
+            getPairKey(_collateralToken, _indexToken)
+        ];
         uint256 currentLeverage = maxLeverage;
         if (remainMargin > 0) {
-            currentLeverage = (uint256(
-                token1ToToken2(_indexToken, int256(pos.size), _collateralToken)
-            ) * FutureMath.LEVERAGE_PRECISION) / uint256(remainMargin);
+            currentLeverage =
+                (uint256(
+                    token1ToToken2(
+                        _indexToken,
+                        int256(pos.size),
+                        _collateralToken
+                    )
+                ) * FutureMath.LEVERAGE_PRECISION) /
+                uint256(remainMargin);
         }
         if (maxLeverage < currentLeverage) {
             isRevert = true;
@@ -1074,7 +1353,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         bool _isLong,
         bool _raise
     ) public view override returns (bool shouldLiquidate) {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
         if (pos.size == 0) {
@@ -1097,12 +1381,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
                 revert("should_liquidate");
             }
         } else {
-            uint256 mantainanceMarginRatio = IFutureUtil(futureUtil).getMaintanenceMarginRatio(
-                _collateralToken,
-                _indexToken,
-                _account,
-                _isLong
-            );
+            uint256 mantainanceMarginRatio = IFutureUtil(futureUtil)
+                .getMaintanenceMarginRatio(
+                    _collateralToken,
+                    _indexToken,
+                    _account,
+                    _isLong
+                );
             if (marginRatio < int256(mantainanceMarginRatio)) {
                 shouldLiquidate = true;
                 if (_raise) {
@@ -1149,7 +1434,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             uint256 openNotional
         )
     {
-        (fundingFee, tradingFee, pnl, remainMargin, marginRatio) = _calcNewPosition(
+        (
+            fundingFee,
+            tradingFee,
+            pnl,
+            remainMargin,
+            marginRatio
+        ) = _calcNewPosition(
             _collateralToken,
             _indexToken,
             _account,
@@ -1159,7 +1450,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             _isIncreasePosition
         );
 
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
         if (_isIncreasePosition) {
@@ -1190,10 +1486,22 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             int256 marginRatio
         )
     {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
-        tradingFee = calculateTradingFee(_collateralToken, _indexToken, _isLong, _notionalDelta, _sizeDelta, _isIncreasePosition);
+        tradingFee = calculateTradingFee(
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            _notionalDelta,
+            _sizeDelta,
+            _isIncreasePosition
+        );
 
         fundingFee = calculateFundingFee(
             _collateralToken,
@@ -1205,17 +1513,26 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         );
 
         uint256 notional = 0;
-        (pnl, notional) = calculatePnl(_collateralToken, _indexToken, _account, _isLong);
+        (pnl, notional) = calculatePnl(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
 
-        remainMargin = int256(pos.margin) - int256(tradingFee) - fundingFee + pnl;
+        remainMargin =
+            int256(pos.margin) -
+            int256(tradingFee) -
+            fundingFee +
+            pnl;
 
         if (pos.openNotional == 0) {
             marginRatio = int256(FutureMath.MAX_MR);
         } else {
             if (notional > 0) {
                 marginRatio =
-                (int256(FutureMath.MARGIN_RATIO_PRECISION) * remainMargin) /
-                int256(notional);
+                    (int256(FutureMath.MARGIN_RATIO_PRECISION) * remainMargin) /
+                    int256(notional);
             } else {
                 marginRatio = int256(FutureMath.MAX_MR);
             }
@@ -1230,7 +1547,7 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         uint256 _notionalDelta,
         uint256 sizeDelta,
         bool _isIncreasePosition
-    ) private view returns(uint256) {
+    ) private view returns (uint256) {
         bytes32 pairKey = getPairKey(_collateralToken, _indexToken);
         uint256 feeRate = tradingFeeRates[pairKey];
 
@@ -1242,13 +1559,17 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             } else {
                 totalShortSize += sizeDelta;
             }
-            if (_isLong && totalLongSize > totalShortSize && totalShortSize != 0) {
-                feeRate = totalLongSize * feeRate / totalShortSize;
+            if (
+                _isLong && totalLongSize > totalShortSize && totalShortSize != 0
+            ) {
+                feeRate = (totalLongSize * feeRate) / totalShortSize;
             }
-            if (!_isLong && totalLongSize < totalShortSize && totalLongSize != 0) {
-                feeRate = totalShortSize * feeRate / totalLongSize;
+            if (
+                !_isLong && totalLongSize < totalShortSize && totalLongSize != 0
+            ) {
+                feeRate = (totalShortSize * feeRate) / totalLongSize;
             }
-        } 
+        }
         // else {
         //     if (_isLong) {
         //         totalLongSize -= sizeDelta;
@@ -1262,7 +1583,8 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         //         feeRate = totalShortSize * feeRate / totalLongSize;
         //     }
         // }
-        return feeRate * _notionalDelta / FutureMath.TRADING_FEE_RATE_PRECISION;
+        return
+            (feeRate * _notionalDelta) / FutureMath.TRADING_FEE_RATE_PRECISION;
     }
 
     // calculate funding fee
@@ -1283,7 +1605,8 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         if (_isLong) {
             fundingFee =
                 (int256(pos.openNotional) *
-                    (cumulativeLongFundingRates[pairKey] - pos.entryFundingRate)) /
+                    (cumulativeLongFundingRates[pairKey] -
+                        pos.entryFundingRate)) /
                 int256(FutureMath.FUNDING_RATE_PRECISION);
             fundingFee +=
                 (int256(_increaseNotionalDelta) * longFundingRates[pairKey]) /
@@ -1291,7 +1614,8 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         } else {
             fundingFee =
                 (int256(pos.openNotional) *
-                    (cumulativeShortFundingRates[pairKey] - pos.entryFundingRate)) /
+                    (cumulativeShortFundingRates[pairKey] -
+                        pos.entryFundingRate)) /
                 int256(FutureMath.FUNDING_RATE_PRECISION);
             fundingFee +=
                 (int256(_increaseNotionalDelta) * shortFundingRates[pairKey]) /
@@ -1300,13 +1624,17 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     }
 
     //position PnL&funding fee is settled with insurance pool when opened/closed/liquidated
-    function insuranceFundSettlement(address _collateralToken, int256 settleAmount) private {
+    function insuranceFundSettlement(
+        address _collateralToken,
+        int256 settleAmount
+    ) private {
         // if add amount to insurance, just add it
         if (settleAmount > 0) {
             emit UpdateInsuranceFund(
                 _collateralToken,
                 collateralInsuranceFunds[_collateralToken],
-                collateralInsuranceFunds[_collateralToken] + uint256(settleAmount)
+                collateralInsuranceFunds[_collateralToken] +
+                    uint256(settleAmount)
             );
             collateralInsuranceFunds[_collateralToken] =
                 collateralInsuranceFunds[_collateralToken] +
@@ -1319,7 +1647,8 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             emit UpdateInsuranceFund(
                 _collateralToken,
                 collateralInsuranceFunds[_collateralToken],
-                collateralInsuranceFunds[_collateralToken] - uint256(uSettleAmount)
+                collateralInsuranceFunds[_collateralToken] -
+                    uint256(uSettleAmount)
             );
             collateralInsuranceFunds[_collateralToken] =
                 collateralInsuranceFunds[_collateralToken] -
@@ -1336,7 +1665,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _account,
         bool _isLong
     ) private view returns (int256, uint256) {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
         uint256 collateralPrice = getPrice(_collateralToken);
@@ -1384,7 +1718,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) external onlyOwner {
         bytes32 key = getPairKey(_collateralToken, _indexToken);
 
-        require(tradingFeeRate < FutureMath.TRADING_FEE_RATE_PRECISION, "invalid_rate");
+        require(
+            tradingFeeRate < FutureMath.TRADING_FEE_RATE_PRECISION,
+            "invalid_rate"
+        );
         tradingFeeRates[key] = tradingFeeRate;
 
         emit UpdateTradingFeeRate(
@@ -1392,7 +1729,7 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             _collateralToken,
             _indexToken,
             tradingFeeRate
-            );
+        );
     }
 
     // funding fee rate update
@@ -1404,9 +1741,23 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         int256 _sizeDelta
     ) private {
         if (_isLong) {
-            updateFundingFeeRate(_collateralToken, _indexToken, _notionalDelta, 0, _sizeDelta, 0);
+            updateFundingFeeRate(
+                _collateralToken,
+                _indexToken,
+                _notionalDelta,
+                0,
+                _sizeDelta,
+                0
+            );
         } else {
-            updateFundingFeeRate(_collateralToken, _indexToken, 0, _notionalDelta, 0, _sizeDelta);
+            updateFundingFeeRate(
+                _collateralToken,
+                _indexToken,
+                0,
+                _notionalDelta,
+                0,
+                _sizeDelta
+            );
         }
     }
 
@@ -1470,7 +1821,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) external onlyOwner {
         bytes32 key = getPairKey(_collateralToken, _indexToken);
 
-        require(maxLeverage >= FutureMath.LEVERAGE_PRECISION, "invalid_leverage");
+        require(
+            maxLeverage >= FutureMath.LEVERAGE_PRECISION,
+            "invalid_leverage"
+        );
         require(maxPositionUsdWithMaxLeverage > 0, "invalid_usd_value");
         maxPositionUsdWithMaxLeverages[key] = maxPositionUsdWithMaxLeverage;
         maxLeverages[key] = maxLeverage;
@@ -1492,7 +1846,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         uint256 _maxMaintanenceMarginRatio
     ) external onlyOwner {
         bytes32 key = getPairKey(_collateralToken, _indexToken);
-        require(_minMaintanenceMarginRatio <= _maxMaintanenceMarginRatio, "invalid_min_max");
+        require(
+            _minMaintanenceMarginRatio <= _maxMaintanenceMarginRatio,
+            "invalid_min_max"
+        );
         require(_minMaintanenceMarginRatio > 0, "invalid_margin_ratio");
 
         minMaintanenceMarginRatios[key] = _minMaintanenceMarginRatio;
@@ -1534,24 +1891,43 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     }
 
     // withdraw fee revenue
-    function realizeProtocolFee(address[] memory collateralTokens, address[] memory indexTokens)
-        external
-    {
-        require(msg.sender == protocolFeeTo || msg.sender == owner(), "invalid_access");
-        require(collateralTokens.length == indexTokens.length, "invalid_args_length");
+    function realizeProtocolFee(
+        address[] memory collateralTokens,
+        address[] memory indexTokens
+    ) external {
+        require(
+            msg.sender == protocolFeeTo || msg.sender == owner(),
+            "invalid_access"
+        );
+        require(
+            collateralTokens.length == indexTokens.length,
+            "invalid_args_length"
+        );
         for (uint256 i = 0; i < collateralTokens.length; i++) {
             realizePairProtocoFee(collateralTokens[i], indexTokens[i]);
         }
     }
 
     // withdraw fee one pair a time
-    function realizePairProtocoFee(address collateralToken, address indexToken) public {
-        require(msg.sender == protocolFeeTo || msg.sender == owner(), "invalid_access");
+    function realizePairProtocoFee(
+        address collateralToken,
+        address indexToken
+    ) public {
+        require(
+            msg.sender == protocolFeeTo || msg.sender == owner(),
+            "invalid_access"
+        );
         bytes32 pairKey = getPairKey(collateralToken, indexToken);
         uint256 amount = protocolUnrealizedFees[pairKey];
         if (amount > 0) {
             _transferOut(collateralToken, amount, protocolFeeTo);
-            emit RealizeProtocolFee(pairKey, collateralToken, indexToken, protocolFeeTo, amount);
+            emit RealizeProtocolFee(
+                pairKey,
+                collateralToken,
+                indexToken,
+                protocolFeeTo,
+                amount
+            );
         }
         protocolUnrealizedFees[pairKey] = 0;
     }
@@ -1562,11 +1938,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     }
 
     // get pair key
-    function getPairKey(address _collateralToken, address _indexToken)
-        public
-        pure
-        returns (bytes32)
-    {
+    function getPairKey(
+        address _collateralToken,
+        address _indexToken
+    ) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(_collateralToken, _indexToken));
     }
 
@@ -1587,7 +1962,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
             int256 entryFundingRate
         )
     {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
         return (pos.margin, pos.openNotional, pos.size, pos.entryFundingRate);
     }
@@ -1598,8 +1978,18 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _indexToken,
         address _account,
         bool _isLong
-    ) external view override returns (uint256 collateralPrice, uint256 indexPrice) {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+    )
+        external
+        view
+        override
+        returns (uint256 collateralPrice, uint256 indexPrice)
+    {
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
 
         collateralPrice = pos.entryCollateralPrice;
@@ -1627,21 +2017,30 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _account,
         bool _isLong
     ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_collateralToken, _indexToken, _account, _isLong));
+        return
+            keccak256(
+                abi.encodePacked(
+                    _collateralToken,
+                    _indexToken,
+                    _account,
+                    _isLong
+                )
+            );
     }
 
     // get pair status(listed/unlisted...)
-    function getPairStatus(address _collateralToken, address _indexToken)
-        public
-        view
-        returns (PairStatus)
-    {
+    function getPairStatus(
+        address _collateralToken,
+        address _indexToken
+    ) public view returns (PairStatus) {
         bytes32 key = getPairKey(_collateralToken, _indexToken);
         return pairs[key].status;
     }
 
     // add funds to insurance pool
-    function increaseInsuranceFund(address _collateralToken) public nonReentrant {
+    function increaseInsuranceFund(
+        address _collateralToken
+    ) public nonReentrant {
         uint256 _amount = _transferIn(_collateralToken);
         emit UpdateInsuranceFund(
             _collateralToken,
@@ -1659,7 +2058,10 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         uint256 _amount,
         address _receiver
     ) public onlyOwner nonReentrant {
-        require(collateralInsuranceFunds[_collateralToken] > _amount, "insuff_insurance_fund");
+        require(
+            collateralInsuranceFunds[_collateralToken] > _amount,
+            "insuff_insurance_fund"
+        );
         emit UpdateInsuranceFund(
             _collateralToken,
             collateralInsuranceFunds[_collateralToken],
@@ -1680,9 +2082,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) private {
         bytes32 pairKey = getPairKey(_collateralToken, _indexToken);
         if (_isLong) {
-            totalLongOpenNotionals[pairKey] = totalLongOpenNotionals[pairKey] + amount;
+            totalLongOpenNotionals[pairKey] =
+                totalLongOpenNotionals[pairKey] +
+                amount;
         } else {
-            totalShortOpenNotionals[pairKey] = totalShortOpenNotionals[pairKey] + amount;
+            totalShortOpenNotionals[pairKey] =
+                totalShortOpenNotionals[pairKey] +
+                amount;
         }
     }
 
@@ -1695,9 +2101,13 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
     ) private {
         bytes32 pairKey = getPairKey(_collateralToken, _indexToken);
         if (_isLong) {
-            totalLongOpenNotionals[pairKey] = totalLongOpenNotionals[pairKey] - amount;
+            totalLongOpenNotionals[pairKey] =
+                totalLongOpenNotionals[pairKey] -
+                amount;
         } else {
-            totalShortOpenNotionals[pairKey] = totalShortOpenNotionals[pairKey] - amount;
+            totalShortOpenNotionals[pairKey] =
+                totalShortOpenNotionals[pairKey] -
+                amount;
         }
     }
 
@@ -1738,7 +2148,12 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
         address _account,
         bool _isLong
     ) private view returns (Position storage) {
-        bytes32 posKey = getPositionKey(_collateralToken, _indexToken, _account, _isLong);
+        bytes32 posKey = getPositionKey(
+            _collateralToken,
+            _indexToken,
+            _account,
+            _isLong
+        );
         Position storage pos = positions[posKey];
         return pos;
     }
@@ -1780,7 +2195,6 @@ contract Future is IFuture, ReentrancyGuard, Ownable {
                 );
         }
     }
-
 
     // transfer funds out of this contract
     function _transferOut(
