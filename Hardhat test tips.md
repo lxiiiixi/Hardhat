@@ -1,3 +1,23 @@
+## 指定用户部署合约
+
+`getContractFactory` 传入第二个参数（希望部署这个合约的用户地址），那么在这个合约中收到的 msg.sender 即为这个用户。
+
+```js
+// 测试文件中：
+console.log("userAddress", userAddress.address); // 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+receiverContract = await (await ethers.getContractFactory('ReceiverUnstoppable', userAddress)).deploy(
+  vault.address
+);
+
+// 合约中：
+    constructor(address poolAddress) Owned(msg.sender) {
+        console.log(msg.sender); // 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc
+        pool = UnstoppableVault(poolAddress);
+    }
+```
+
+
+
 ## 比较数值的小于、等于、大于
 
 > https://docs.ethers.org/v5/api/utils/bignumber/#BigNumber--BigNumber--methods--comparison-and-equivalence
@@ -5,6 +25,27 @@
 expect(A).to.gte(B) // A >= B
 expect(A).to.equal(B) // A = B
 expect(A).to.lte(B) // A <= B
+
+> ##### Tips
+>
+> hardhat 中的比较是值比较，也就是说不同类型的数据值相同是可以比较的。
+>
+> ```js
+> const TOKENS_IN_VAULT = 1000000n * 10n ** 18n;
+> console.log(await token.balanceOf(vault.address), "---", TOKENS_IN_VAULT);
+> console.log(typeof (await token.balanceOf(vault.address)), "---", typeof (TOKENS_IN_VAULT));
+> console.log((await token.balanceOf(vault.address)) === (TOKENS_IN_VAULT));
+> 
+> // 输出如下：
+> BigNumber { value: "1000000000000000000000000" } --- 1000000000000000000000000n
+> object --- bigint
+> false
+> 
+> // 这样比较是正确的
+> expect(await token.balanceOf(vault.address)).to.eq(TOKENS_IN_VAULT);
+> ```
+>
+> `expect(...).to.eq(...)` 中比较这两个值时，实际上进行的是一个值比较，而不是一个严格的类型比较。
 
 ## 在一次合约方法调用时测试多个事件参数
 
