@@ -58,4 +58,3 @@ npx hardhat flatten contracts/Foo.sol > Flattened.sol # 导出单一文件命令
 | 0.8.x    | 4.0.x - 4.5.x        |
 
 > OpenZeppelin v3.4 兼容 sol v0.6 和 sol v0.7
-
