@@ -22,9 +22,9 @@ describe("Compound", function () {
     const comp = await Comp.deploy(owner.address);
     // 2.3 部署 Comptroller 与 Unitroller
     //     任务模块合约，它用来验证用户行为权限。当用户不满足特定任务条件时，便会关闭该行为。
-    const Comptroller = await ethers.getContractFactory("Comptroller");
+    const Comptroller = await ethers.getContractFactory("Comptroller"); // 实现合约
     let comptroller = await Comptroller.deploy();
-    const Unitroller = await ethers.getContractFactory("Unitroller");
+    const Unitroller = await ethers.getContractFactory("Unitroller"); // 代理合约
     let unitroller = await Unitroller.deploy();
     await unitroller._setPendingImplementation(comptroller.address);
     await comptroller._become(unitroller.address);

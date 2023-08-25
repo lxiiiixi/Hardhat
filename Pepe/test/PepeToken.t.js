@@ -6,7 +6,6 @@ describe("PepeToken Test", function () {
   const totalSupply = ethers.parseEther("420690000000000")
   const AddressZero = "0x0000000000000000000000000000000000000000"
 
-
   async function deployToken() {
     [owner, addr1, addr2, uniswapV2PairMock] = await ethers.getSigners();
     const PepeToken = await ethers.getContractFactory("PepeToken");
