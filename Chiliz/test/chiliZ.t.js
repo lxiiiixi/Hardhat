@@ -1,16 +1,14 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-// ERC20 Ownable 代币测试模版
-
-describe("Torum Token Test", function () {
+describe("ChiliZ Token Test", function () {
   let owner, addr1;
-  const totalSupply = ethers.parseEther("800000000")
+  const totalSupply = ethers.parseEther("8888888888")
   const AddressZero = "0x0000000000000000000000000000000000000000"
 
   async function deployToken() {
     [owner, addr1] = await ethers.getSigners();
-    const TorumToken = await ethers.getContractFactory("Torum");
+    const TorumToken = await ethers.getContractFactory("chiliZ");
     const instance = await TorumToken.deploy();
     return { instance };
   }
@@ -21,8 +19,8 @@ describe("Torum Token Test", function () {
 
       expect(await instance.totalSupply()).equal(totalSupply);
       expect(await instance.balanceOf(owner.address)).equal(totalSupply);
-      expect(await instance.name()).equal("Torum");
-      expect(await instance.symbol()).equal("XTM");
+      expect(await instance.name()).equal("chiliZ");
+      expect(await instance.symbol()).equal("CHZ");
       expect(await instance.decimals()).equal(18);
     });
   });
@@ -40,16 +38,16 @@ describe("Torum Token Test", function () {
     it("Should be failed if sender doesn’t have enough tokens", async function () {
       const { instance } = await deployToken();
       const initialOwnerBalance = await instance.balanceOf(owner.address);
-      await expect(instance.connect(addr1).transfer(owner.address, 1)).to.revertedWith("ERC20: transfer amount exceeds balance");
+      await expect(instance.connect(addr1).transfer(owner.address, 1)).to.reverted;
       expect(await instance.balanceOf(owner.address)).to.equal(initialOwnerBalance);
     });
 
     it("Should be failed if sender transfer to zero address", async function () {
       const { instance } = await deployToken();
       const transferAmount = 5000;
-      await expect(instance.transfer(AddressZero, transferAmount)).to.revertedWith("ERC20: transfer to the zero address");
+      await expect(instance.transfer(AddressZero, transferAmount)).to.reverted;
       await instance.approve(owner.address, transferAmount);
-      await expect(instance.transferFrom(owner.address, AddressZero, transferAmount)).to.revertedWith("ERC20: transfer to the zero address");
+      await expect(instance.transferFrom(owner.address, AddressZero, transferAmount)).to.reverted;
     });
 
     it("Should be successful if sender transfer to himself", async function () {
@@ -78,7 +76,7 @@ describe("Torum Token Test", function () {
       const { instance } = await deployToken();
       const transferAmount = 5000;
 
-      await expect(instance.transferFrom(owner.address, addr1.address, transferAmount)).to.revertedWith("ERC20: insufficient allowance")
+      await expect(instance.transferFrom(owner.address, addr1.address, transferAmount)).to.reverted;
       await instance.approve(owner.address, transferAmount);
       await expect(instance.transferFrom(owner.address, addr1.address, transferAmount))
         .be.emit(instance, "Transfer").withArgs(owner.address, addr1.address, transferAmount);
@@ -127,21 +125,90 @@ describe("Torum Token Test", function () {
 
       await expect(instance.decreaseAllowance(addr1.address, approveAmount + 1n))
         .to.reverted;
-
       expect(await instance.allowance(owner.address, addr1.address)).to.equal(approveAmount);
     });
   });
 
-  describe("Ownership test", function () {
-    it("Should transfer and renounce ownership correctly", async function () {
+  describe("Pausable functionality tests", function () {
+    it("Should not allow non-pausers to pause/unpause the contract", async function () {
       const { instance } = await deployToken();
 
-      expect(await instance.owner()).to.equal(owner.address);
-      await instance.transferOwnership(addr1.address);
-      expect(await instance.owner()).to.equal(addr1.address);
+      await expect(instance.connect(addr1).pause()).to.be.reverted;
+      await expect(instance.connect(addr1).unpause()).to.be.reverted;
+    });
 
-      await instance.connect(addr1).renounceOwnership();
-      expect(await instance.owner()).to.equal(AddressZero);
+    it("Should pause the contract by pauser and emit Paused event", async function () {
+      const { instance } = await deployToken();
+
+      await expect(instance.pause()).to.emit(instance, "Paused")
+        .withArgs(owner.address);
+
+      expect(await instance.paused()).to.equal(true);
+    });
+
+    it("Should not allow pausing if already paused", async function () {
+      const { instance } = await deployToken();
+
+      await instance.pause();
+      await expect(instance.pause()).to.be.reverted;
+    });
+
+    it("Should unpause the contract by pauser and emit Unpaused event", async function () {
+      const { instance } = await deployToken();
+
+      await instance.pause();
+      await expect(instance.unpause()).to.emit(instance, "Unpaused")
+        .withArgs(owner.address);
+
+      expect(await instance.paused()).to.equal(false);
+    });
+
+    it("Should not allow unpausing if not paused", async function () {
+      const { instance } = await deployToken();
+
+      await expect(instance.unpause()).to.be.reverted;
+    });
+
+    // Assuming "transfer" is modified with "whenNotPaused" modifier in the ERC20Pausable contract
+    it("Should not allow token functions to be called when paused", async function () {
+      const { instance } = await deployToken();
+      const transferAmount = 1000;
+
+      await instance.pause();
+      await expect(instance.transfer(addr1.address, transferAmount)).to.be.reverted;
+      await expect(instance.approve(addr1.address, transferAmount)).to.be.reverted;
     });
   });
+
+  describe("PauserRole functionality tests", function () {
+    it("Should set the contract deployer as the initial pauser", async function () {
+      const { instance } = await deployToken();
+      expect(await instance.isPauser(owner.address)).to.equal(true);
+    });
+
+    it("Should allow pauser to add another pauser and emit PauserAdded event", async function () {
+      const { instance } = await deployToken();
+
+      await expect(instance.addPauser(addr1.address)).to.emit(instance, "PauserAdded").withArgs(addr1.address);
+      expect(await instance.isPauser(addr1.address)).to.equal(true);
+    });
+
+    it("Should not allow non-pausers to add a pauser", async function () {
+      const { instance } = await deployToken();
+      await expect(instance.connect(addr1).addPauser(addr1.address)).to.be.reverted;
+    });
+
+    it("Should allow a pauser to renounce its role and emit PauserRemoved event", async function () {
+      const { instance } = await deployToken();
+      await instance.addPauser(addr1.address);
+      await expect(instance.connect(addr1).renouncePauser()).to.emit(instance, "PauserRemoved").withArgs(addr1.address);
+      expect(await instance.isPauser(addr1.address)).to.equal(false);
+    });
+
+    it("Should not allow non-pausers to renounce pauser role", async function () {
+      const { instance } = await deployToken();
+      await expect(instance.connect(addr1).renouncePauser()).to.be.reverted;
+    });
+  });
+
 });
