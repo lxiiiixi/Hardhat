@@ -160,6 +160,8 @@ describe("DogeCeo", function () {
       const { instance, supply } = await loadFixture(deployUniswapAndDogoCeo);
       const max = ethers.constants.MaxUint256;
       const rTotal = max.sub(max.mod(supply));
+      console.log(max, rTotal, supply);
+
       const rate = rTotal.div(supply);
       // console.log(rTotal, rate, supply, max);
       for (let i = 0; i < 10; i++) {
