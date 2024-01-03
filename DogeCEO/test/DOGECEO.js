@@ -35,7 +35,7 @@ describe("DogeCeo", function () {
     // let initCode = ethers.utils.keccak256(UniswapV2Pair.bytecode);
     // console.log(initCode);
 
-    // 4. 部署 DogeCeo
+    // 4. 部署 DogeCeof
     const DogeCeo = await ethers.getContractFactory("DOGECEO");
     const instance = await DogeCeo.deploy(router.address);
 
