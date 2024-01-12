@@ -1,0 +1,27 @@
+{
+  "name": "passover",
+  "version": "1.0.0",
+  "description": "Here, we will observe Passover!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "hardhat": "^2.19.4"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1",
+    "keccak256": "^1.0.6",
+    "merkletreejs": "^0.3.11"
+  }
+}
