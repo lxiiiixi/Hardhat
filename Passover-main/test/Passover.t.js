@@ -1,7 +1,6 @@
 const {
     loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { MerkleTree } = require('merkletreejs');
 const keccak256 = require('keccak256');
@@ -12,7 +11,7 @@ async function deployContract(name, args, options) {
     return await contractFactory.deploy(...args)
 }
 
-describe("INSC Unit Test", function () {
+describe("Passover Unit Test", function () {
     const abiCoder = new ethers.AbiCoder();
     let add1, add2, otherUsers;
     const vaultAddress = ethers.Wallet.createRandom().address;
@@ -115,25 +114,43 @@ describe("INSC Unit Test", function () {
         });
 
         it("Test refund", async function () {
-            const { instance, leaves, fixedHash, tree } = await loadFixture(deployFixture)
+            const { instance, fixedHash, tree } = await loadFixture(deployFixture)
 
             // refund: caller -> vault
-            await expect(instance.refund(...getProof(tree, add1.address, 0, fixedHash, { value: 100n })))
+            await expect(instance.refund(...getProof(tree, add1.address, 0, fixedHash), { value: 100n }))
                 .to.revertedWith("The refund amount is incorrect")
-            await expect(instance.refund(...getProof(tree, add1.address, 1, fixedHash, { value: 1000n })))
-                .to.revertedWith("The refund amount is incorrect")
+            await expect(instance.refund(...getProof(tree, add1.address, 1, fixedHash), { value: 1000n }))
+                .to.revertedWith("Merkle verification failed")
 
             expect(await ethers.provider.getBalance(vaultAddress)).to.equal(0);
+            const expectedString = `data:text/plain;charset=utf-8,${String(add1.address).toLocaleLowerCase()}has already refunded the sales proceeds of INSC0, and he will receive the corresponding INSC+`;
             await expect(instance.refund(...getProof(tree, add1.address, 0, fixedHash), { value: 1000n }))
                 .to.emit(instance, "Inscribe")
-                .withArgs(0n, "data:text/plain;charset=utf-8," + ethers.toBeHex(add1.address) + "has already refunded the sales proceeds of INSC" + "0" + ", and he will receive the corresponding INSC+");
+                .withArgs(0n, ethers.toUtf8Bytes(expectedString));
             expect(await ethers.provider.getBalance(vaultAddress)).to.equal(1000n);
 
+            await expect(instance.refund(...getProof(tree, add1.address, 0, fixedHash), { value: 1000n }))
+                .to.revertedWith("This leaf has been used")
+        });
 
+        it("Test claimLossesAfterRefund", async function () {
+            const { instance, leaves, fixedHash, tree } = await loadFixture(deployFixture)
 
-            // await expect(instance.refund(...getProof(tree, add1.address, 1, fixedHash, { value: 1000n })))
-            //     .to.revertedWith("The refund amount is incorrect")
-
+            await expect(instance.claimLossesAfterRefund(...getProof(tree, add1.address, 1, fixedHash)))
+                .to.revertedWith("Merkle verification failed")
+            await expect(instance.connect(add2).claimLossesAfterRefund(...getProof(tree, add1.address, 1, fixedHash)))
+                .to.revertedWith("Merkle verification failed")
+            expect(await instance.leafStatus(leaves[0])).to.equal(false);
+            expect(await instance.balanceOf(add1.address)).to.equal(0n);
+            expect(await instance.totalSupply()).to.equal(0n);
+            await expect(instance.claimLossesAfterRefund(...getProof(tree, add1.address, 0, fixedHash)))
+                .to.emit(instance, "ClaimLosses")
+                .withArgs(0n, add1.address, 1000n, fixedHash);
+            expect(await instance.leafStatus(leaves[0])).to.equal(true);
+            expect(await instance.balanceOf(add1.address)).to.equal(1000n);
+            expect(await instance.totalSupply()).to.equal(1000n);
+            await expect(instance.claimLossesAfterRefund(...getProof(tree, add1.address, 0, fixedHash)))
+                .to.revertedWith("This leaf has been used")
         });
     });
 });

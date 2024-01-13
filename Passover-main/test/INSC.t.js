@@ -1,7 +1,6 @@
 const {
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { MerkleTree } = require('merkletreejs');
 const keccak256 = require('keccak256');
@@ -14,13 +13,15 @@ async function deployContract(name, args, options) {
 
 describe("INSC Unit Test", function () {
   const abiCoder = new ethers.AbiCoder();
+  const mintString = 'data:text/plain;charset=utf-8,{"p":"ins-20","op":"mint","tick":"INSC+","amt":"1000"}'
+  const transferString = 'data:text/plain;charset=utf-8,{"p":"ins-20","op":"transfer","tick":"INSC+","amt":"1000"}'
   let add1, add2, otherUsers;
   let maxSupply = 21000000n;
-  let tickNumberMax = 63000n
+  let mintLimit = 1000n
 
   async function deployFixture() {
     [add1, add2, ...otherUsers] = await ethers.getSigners();
-    const instance = await deployContract("INS20", ["INSC", maxSupply, 1000n, tickNumberMax, add1.address]);
+    const instance = await deployContract("INS20", [maxSupply, mintLimit, add1.address]);
 
     const leaves = [add1.address, add2.address, ...otherUsers.map(u => u.address)]
       .map((x, i) => keccak256(abiCoder.encode(["address", "uint256"], [x, i])));
@@ -37,16 +38,55 @@ describe("INSC Unit Test", function () {
     return [tokenId, proof]
   }
 
+  function convertUint8ToHexStr(byteArray) {
+    return Array.from(byteArray, function (byte) {
+      return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  function getInscribeBytes(amount) {
+    const expectedString = `data:text/plain;charset=utf-8,{"p":"ins-20","op":"transfer","tick":"INSC+","amt":"${amount}"}`;
+    return ethers.toUtf8Bytes(expectedString);
+  }
+
   describe("Test metadata", function () {
-    it("Should set the correct ERC20 data", async function () {
-      const { instance } = await loadFixture(deployFixture)
-      // console.log(await instance.name());
-      // console.log(await instance.totalSupply());
-      // console.log(await instance.root());
+    it("Should set the correct data", async function () {
+      const { instance, root } = await loadFixture(deployFixture)
+
+      expect(await instance.owner()).to.equal(add1.address);
+      expect(await instance.name()).to.equal("INSC Plus");
+      expect(await instance.symbol()).to.equal("INSC+");
+      expect(await instance.decimals()).to.equal(0);
+      expect(await instance.totalSupply()).to.equal(0n);
+      expect(await instance.root()).to.equal('0x' + root);
+      expect(await instance.maxSupply()).to.equal(maxSupply);
+      expect(await instance.mintLimit()).to.equal(mintLimit);
+      expect(await instance.transferInsData()).to.equal("0x" + convertUint8ToHexStr(ethers.toUtf8Bytes(transferString)));
     });
   });
 
   describe("Test inscribe", function () {
+    it("Inscribe can be called afer the owner openInscribe", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await expect(instance.inscribe(...getProof(tree, add1.address, 0)))
+        .to.revertedWith("Is not open");
+      await expect(instance.connect(add2).openInscribe())
+        .to.revertedWithCustomError(instance, "OwnableUnauthorizedAccount");
+    });
+
+    it("Inscribe will emit an event", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await expect(instance.inscribe(...getProof(tree, add1.address, 0)))
+        .to.emit(instance, "Inscribe")
+        .withArgs(0, ethers.toUtf8Bytes(mintString))
+      await expect(instance.connect(add2).inscribe(...getProof(tree, add2.address, 1)))
+        .to.emit(instance, "Inscribe")
+        .withArgs(1, ethers.toUtf8Bytes(mintString))
+    });
+
     it("Inscribe twice by the same address", async function () {
       const { instance } = await loadFixture(deployFixture)
 
@@ -82,9 +122,7 @@ describe("INSC Unit Test", function () {
       expect(await instance.totalSupply()).to.equal(1000n);
       await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
       expect(await instance.totalSupply()).to.equal(2000n);
-      await instance.connect(otherUsers[0]).inscribe(...getProof(tree, otherUsers[0].address, 2))
-      expect(await instance.totalSupply()).to.equal(3000n);
-      await expect(instance.connect(otherUsers[1]).inscribe(...getProof(tree, otherUsers[1].address, 3)))
+      await expect(instance.connect(otherUsers[0]).inscribe(...getProof(tree, otherUsers[0].address, 2)))
         .to.revertedWith("Exceeded mint limit");
     });
   });
@@ -113,11 +151,43 @@ describe("INSC Unit Test", function () {
       await mockTransfer.connect(add2).triggerReentrancy(1, add3.address)
       expect(await instance.slotFT(add2.address)).to.equal(0n);
       expect(await instance.slotFT(add3.address)).to.equal(1n);
-      expect(await instance.slotFT(mockTransfer.target)).to.equal(1n);
+      expect(await instance.slotFT(mockTransfer.target)).to.equal(0n);
     });
   });
 
   describe("Test transfer", function () {
+    it("Transfer can be called afer the owner openFT", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+
+      await expect(instance.transfer(add2.address, 1000n))
+        .to.revertedWith('The ability of FT has not been granted')
+    });
+
+    it("Transfer when not reach the limit", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+      await instance.openFT()
+      const add3 = otherUsers[0]
+      await expect(instance.connect(add2).transfer(add3.address, 1000n))
+        .to.revertedWithCustomError(instance, "ERC721InvalidSender");
+    });
+
+    it("Transfer will emit event", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+      await instance.openFT()
+      const add3 = otherUsers[0]
+      await instance.connect(add2).transfer(add3.address, 1000n)
+    });
+
     it("Can't be transfered if tokenId is 0", async function () {
       const { instance, tree } = await loadFixture(deployFixture)
       await instance.openInscribe()
@@ -139,45 +209,192 @@ describe("INSC Unit Test", function () {
       expect(await instance.balanceOf(add2.address)).to.equal(1000n);
     });
 
-    it("Test reach tickNumberMax", async function () {
-      tickNumberMax = 2n
-      const { instance, tree } = await deployFixture()
+    it("Test transfer from or to address whose slot is 0", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
       await instance.openInscribe()
       await instance.inscribe(...getProof(tree, add1.address, 0))
       await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
       await instance.openFT()
-      // tickNumber = 2
-      await expect(instance.connect(add2).transfer(add1.address, 0)).to.revertedWith("The number of slots has reached the limit") // slotFT[to] == 0
-      await expect(instance.connect(add2).transfer(otherUsers[0].address, 0)).to.revertedWith("The number of slots has reached the limit")
+
+      // will fail to transfer if the slot of the sender is 0
+      await expect(instance.transfer(add2.address, 1000n))
+        .to.revertedWith("The sender must own a slot")
+      await instance.connect(add2).transfer(add1.address, 1000n)
+
+      expect(await instance.slotFT(add2.address)).to.equal(1n);
+      expect(await instance.slotFT(add1.address)).to.equal(2n);
+      expect(await instance.balanceOf(add2.address)).to.equal(0n);
+      await instance.waterToWine(0n, 2n, 1000n)
+      expect(await instance.balanceOf(add1.address)).to.equal(2000n);
+    });
+
+    it("Slots can be minted until the limit is reached", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      const add3 = otherUsers[0]
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+
+      expect(await instance.slotFT(add1.address)).to.equal(0n);
+      expect(await instance.slotFT(add2.address)).to.equal(1n);
+
+      await instance.openFT()
+      await instance.connect(add2).transfer(add3.address, 1000n)
+      expect(await instance.slotFT(add3.address)).to.equal(2n);
+      expect(await instance.balanceOf(add3.address)).to.equal(1000n);
     });
   });
 
   describe("Test transferFrom", function () {
+    it("Tansfer nft need enough allowance", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+
+      const signature = "safeTransferFrom(address,address,uint256,bytes)";
+      await expect(instance.connect(add2)[signature](add1.address, add2.address, 0, "0x"))
+        .to.revertedWithCustomError(instance, "ERC721InsufficientApproval")
+      await instance.approve(add2.address, 0)
+      await instance.connect(add2)[signature](add1.address, add2.address, 0, "0x")
+      await expect(instance.connect(add2)[signature](add1.address, add2.address, 0, "0x"))
+        .to.revertedWith("Slot can only be transferred at the end")
+    });
+
     it("Tansfer From zero address will fail", async function () {
       const { instance, tree } = await loadFixture(deployFixture)
       await instance.openInscribe()
       await instance.inscribe(...getProof(tree, add1.address, 0))
-      await instance.isFTOpen()
       expect(await instance.balanceOf(add1.address)).to.equal(1n);
-      await expect(instance.transferFrom(ethers.ZeroAddress, add1.address, 0)).to.reverted;
+      await expect(instance.transferFrom(ethers.ZeroAddress, add1.address, 0))
+        .to.revertedWithCustomError(instance, "ERC721IncorrectOwner");
+      await expect(instance.transferFrom(add1.address, ethers.ZeroAddress, 0))
+        .to.revertedWithCustomError(instance, "ERC721InvalidReceiver");
       expect(await instance.balanceOf(add1.address)).to.equal(1n);
     });
   });
+
+  describe("Test allowance", function () {
+    it("Only owner of the nft can approve", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+
+      await expect(instance.connect(add2).approve(add2.address, 0n))
+        .to.revertedWithCustomError(instance, "ERC721InvalidApprover")
+
+      expect(await instance.getApproved(1n)).to.equal(ethers.ZeroAddress);
+      await instance.connect(add2).approve(add1.address, 1n)
+      expect(await instance.allowance(add2.address, add1.address)).to.equal(0n);
+      expect(await instance.getApproved(1n)).to.equal(add1.address);
+    });
+
+    it("Allowance are different after toFT", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+
+      expect(await instance.getApproved(1n)).to.equal(ethers.ZeroAddress);
+      await instance.connect(add2).approve(add1.address, 1n)
+      expect(await instance.allowance(add2.address, add1.address)).to.equal(0n);
+      expect(await instance.getApproved(1n)).to.equal(add1.address);
+
+      await instance.openFT()
+      await expect(instance.transferFrom(add2.address, add1.address, 1000n))
+        .to.revertedWith("ERC20: insufficient allowance")
+      await instance.connect(add2).approve(add1.address, 2000n)
+      await instance.transferFrom(add2.address, add1.address, 1000n)
+      expect(await instance.allowance(add2.address, add1.address)).to.equal(1000n);
+    });
+  });
+
+  describe("Test waterToWine", function () {
+    it("Only the owner of the slots can call waterToWine", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+
+      await expect(instance.waterToWine(0n, 1n, 1000n))
+        .to.revertedWith("The ability of FT has not been granted");
+      await instance.openFT()
+      await expect(instance.waterToWine(0n, 1n, 1000n))
+        .to.revertedWith("Is not yours");
+      await instance.connect(add2).transfer(add1.address, 1000n)
+      await instance.waterToWine(0n, 2n, 1000n)
+    });
+
+    it("Should have enough balance", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      // prepare
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+      await instance.openFT()
+      await instance.connect(add2).transfer(add1.address, 1000n)
+
+      expect(await instance.balanceOf(add1.address)).to.equal(1000n);
+      await expect(instance.waterToWine(0n, 2n, 2000n))
+        .to.revertedWith("Insufficient balance");
+      await instance.waterToWine(0n, 2n, 1000n)
+      await expect(instance.waterToWine(0n, 2n, 1000n))
+        .to.revertedWith("Insufficient balance");
+    });
+
+    it("Should increase and decrease a correct balance and emit event", async function () {
+      const { instance, tree } = await loadFixture(deployFixture)
+
+      // prepare
+      await instance.openInscribe()
+      await instance.inscribe(...getProof(tree, add1.address, 0))
+      await instance.connect(add2).inscribe(...getProof(tree, add2.address, 1))
+      await instance.openFT()
+      await instance.connect(add2).transfer(add1.address, 1000n)
+
+      expect(await instance.balanceOf(add1.address)).to.equal(1000n);
+      await expect(instance.waterToWine(0n, 2n, 2000n))
+        .to.revertedWith("Insufficient balance");
+
+      await expect(instance.waterToWine(0n, 2n, 1000n))
+        .to.emit(instance, "Inscribe")
+        .withArgs(0n, getInscribeBytes("0"))
+        .and.to.emit(instance, "Inscribe")
+        .withArgs(2n, getInscribeBytes("2000"))
+
+      expect(await instance.balanceOf(add1.address)).to.equal(2000n);
+      expect(await instance.balanceOf(add2.address)).to.equal(0n);
+
+      await expect(instance.waterToWine(2n, 0n, 1000n))
+        .to.emit(instance, "Inscribe")
+        .withArgs(2n, getInscribeBytes("1000"))
+        .and.to.emit(instance, "Inscribe")
+        .withArgs(0n, getInscribeBytes("1000"))
+
+      expect(await instance.balanceOf(add1.address)).to.equal(1000n);
+
+      await expect(instance.waterToWine(0n, 2n, 1000n))
+        .to.emit(instance, "Inscribe")
+        .withArgs(0n, getInscribeBytes("0"))
+        .and.to.emit(instance, "Inscribe")
+        .withArgs(2n, getInscribeBytes("2000"))
+
+      expect(await instance.balanceOf(add1.address)).to.equal(2000n);
+
+      await expect(instance.waterToWine(2n, 0n, 0))
+        .to.emit(instance, "Inscribe")
+        .withArgs(2n, getInscribeBytes("2000"))
+        .and.to.emit(instance, "Inscribe")
+        .withArgs(0n, getInscribeBytes("0"))
+
+      expect(await instance.balanceOf(add1.address)).to.equal(2000n);
+    });
+  });
 });
-
-
-// 1. recordSlot 重入问题（transferFrom中）
-// 2. tick 变量没用
-// 3. tickNumber 从 0 开始，inscribe 到 maxSupply 会多一次（不能等于）
-// 5. mintLimit 建议直接硬编码为1000
-// 11. 一个地址 inscribe 两次的话记录的 tokenId 和 balance 的情况
-
-
-// 6. 疑问：totalSupply() 的返回值
-// 7. approve、transferFrom 函数编译不通过，ERC20 有返回值而ERC721 没有
-
-// 8. _transferFT 中如果到了 tickNumberMax ，再向新地址转会失败。
-// 9. transferFrom 中 from 如果是零地址后面会失败，前面的操作没有意义。
-// 10. safeTransferFrom 函数不能 override
-
-// 1. claimLossesDirect、claimLossesAfterRefund 没有相关的记录，一个人可以调用领取多次。
