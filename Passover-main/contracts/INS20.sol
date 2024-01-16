@@ -14,6 +14,11 @@ import "hardhat/console.sol";
 contract INS20 is IERC7583, ERC721, Ownable, IERC20, IERC2981 {
     using Strings for uint256;
 
+    struct WTW {
+        uint256 insId;
+        uint256 amount;
+    }
+
     uint64 public maxSupply; // 21,000,000
     uint64 public mintLimit; // 1000
     // number of tickets minted
@@ -64,7 +69,9 @@ contract INS20 is IERC7583, ERC721, Ownable, IERC20, IERC2981 {
 
         address owner = msg.sender;
         // merkle verify
-        bytes32 leaf = keccak256(abi.encode(owner, tokenId));
+        bytes32 leaf = keccak256(
+            bytes.concat(keccak256(abi.encode(owner, tokenId)))
+        );
         require(
             MerkleProof.verify(proofs, root, leaf),
             "Merkle verification failed"
@@ -226,13 +233,56 @@ contract INS20 is IERC7583, ERC721, Ownable, IERC20, IERC2981 {
         );
     }
 
-    /// @notice You can freely transfer the balances between any two of your inscriptions, including slots.
+    /// @notice You can freely transfer the balances of multiple inscriptions into one, including slots.
     /// @dev If compatibility with existing DeFi is not considered, the storage and computation of balance here would be unnecessary.
-    /// @param from Inscription with a decreased balance
-    /// @param to Inscription with a increased balance
-    /// @param amount The value you gonna transfer
+    function waterToWine(WTW[] calldata froms, uint256 to) public {
+        require(isFTOpen, "The ability of FT has not been granted");
+        require(froms.length <= 500, "You drink too much!");
+        require(ownerOf(to) == msg.sender, "Is not yours");
+
+        uint256 increment;
+        // for from
+        for (uint256 i; i < froms.length; i++) {
+            uint256 from = froms[i].insId;
+            require(ownerOf(from) == msg.sender, "Is not yours");
+            uint256 amount = froms[i].amount;
+            uint256 fromBalance = _balancesIns[from];
+            require(fromBalance >= amount, "Insufficient balance");
+            unchecked {
+                _balancesIns[from] = fromBalance - amount;
+            }
+            increment += amount;
+            emit Inscribe(
+                from,
+                bytes(
+                    string.concat(
+                        'data:text/plain;charset=utf-8,{"p":"ins-20","op":"transfer","tick":"INSC+","amt":"',
+                        _balancesIns[from].toString(),
+                        '"}'
+                    )
+                )
+            );
+        }
+
+        _balancesIns[to] += increment;
+        emit Inscribe(
+            to,
+            bytes(
+                string.concat(
+                    'data:text/plain;charset=utf-8,{"p":"ins-20","op":"transfer","tick":"INSC+","amt":"',
+                    _balancesIns[to].toString(),
+                    '"}'
+                )
+            )
+        );
+    }
+
     function waterToWine(uint256 from, uint256 to, uint256 amount) public {
         require(isFTOpen, "The ability of FT has not been granted");
+        _waterToWine(from, to, amount);
+    }
+
+    function _waterToWine(uint256 from, uint256 to, uint256 amount) internal {
         require(
             ownerOf(from) == msg.sender && ownerOf(to) == msg.sender,
             "Is not yours"
@@ -374,7 +424,7 @@ contract INS20 is IERC7583, ERC721, Ownable, IERC20, IERC2981 {
         uint256 tokenId,
         uint256 salePrice
     ) external view returns (address receiver, uint256 royaltyAmount) {
-        return (_royaltyRecipient, (salePrice * 3) / 100);
+        return (_royaltyRecipient, (salePrice * 5) / 1000);
     }
 
     /**
@@ -386,6 +436,10 @@ contract INS20 is IERC7583, ERC721, Ownable, IERC20, IERC2981 {
     }
 
     function openFT() public onlyOwner {
+        // require(
+        //     tickNumber * mintLimit >= maxSupply,
+        //     "Must reach the upper limit before it can be opened"
+        // );
         isFTOpen = true;
     }
 

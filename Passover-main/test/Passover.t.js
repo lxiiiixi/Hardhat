@@ -22,7 +22,7 @@ describe("Passover Unit Test", function () {
 
         const fixedHash = ethers.keccak256(ethers.toUtf8Bytes("Passover"));
         const leaves = [add1.address, add2.address, ...otherUsers.map(u => u.address)]
-            .map((x, i) => keccak256(abiCoder.encode(["uint256", "address", "uint256", "bytes32", "uint256"], [i, x, 1000n, fixedHash, i])));
+            .map((x, i) => keccak256(keccak256(abiCoder.encode(["uint256", "address", "uint256", "bytes32", "uint256"], [i, x, 1000n, fixedHash, i]))));
         // tokenId, msg.sender, amount, txHash, nonce
         const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
         const root = '0x' + tree.getRoot().toString('hex');
@@ -34,7 +34,7 @@ describe("Passover Unit Test", function () {
     }
 
     function getProof(tree, address, tokenId, txHash) {
-        const leaf = keccak256(abiCoder.encode(["uint256", "address", "uint256", "bytes32", "uint256"], [tokenId, address, 1000n, txHash, tokenId]));
+        const leaf = keccak256(keccak256(abiCoder.encode(["uint256", "address", "uint256", "bytes32", "uint256"], [tokenId, address, 1000n, txHash, tokenId])));
         const proof = tree.getProof(leaf).map(x => x.data);
         return [tokenId, 1000n, txHash, tokenId, proof]
     }
@@ -95,6 +95,8 @@ describe("Passover Unit Test", function () {
             const { instance, leaves, fixedHash, tree } = await loadFixture(deployFixture)
 
             await expect(instance.claimLossesDirect(...getProof(tree, add1.address, 1, fixedHash)))
+                .to.revertedWith("Merkle verification failed")
+            await expect(instance.connect(add2).claimLossesDirect(...getProof(tree, add1.address, 1, fixedHash)))
                 .to.revertedWith("Merkle verification failed")
             await expect(instance.connect(add2).claimLossesDirect(...getProof(tree, add1.address, 1, fixedHash)))
                 .to.revertedWith("Merkle verification failed")
